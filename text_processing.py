@@ -1,0 +1,231 @@
+"""
+Servicios de procesamiento de texto y resumen
+"""
+import openai
+import logging
+import textwrap
+from typing import List, Optional
+import backoff
+from langdetect import detect
+
+
+class LanguageDetector:
+    """Detector de idioma para el texto"""
+    
+    def __init__(self, config_manager):
+        self.config = config_manager
+        self.default_language = "es"
+    
+    def detect_language(self, text: str, forced_language: Optional[str] = None) -> str:
+        """
+        Detecta el idioma del texto
+        
+        Args:
+            text: Texto a analizar
+            forced_language: Idioma forzado por el usuario
+            
+        Returns:
+            Código de idioma detectado
+        """
+        # Prioridad 1: Idioma forzado por el usuario
+        if forced_language:
+            logging.info(f"Idioma forzado por el usuario: {forced_language}")
+            return forced_language
+        
+        # Prioridad 2: Idioma forzado por configuración
+        forced_by_config = self.config.get('IDIOMA_FORZADO')
+        if forced_by_config:
+            logging.info(f"Idioma forzado por configuración: {forced_by_config}")
+            return forced_by_config
+        
+        # Prioridad 3: Detección automática
+        try:
+            detected_lang = detect(text)
+            logging.info(f"Idioma detectado automáticamente: {detected_lang}")
+            return detected_lang
+        except Exception as e:
+            logging.error(f"Error detectando idioma: {e}. Usando '{self.default_language}' por defecto.")
+            return self.default_language
+
+
+class TextProcessor:
+    """Procesador de texto que maneja división y formateo"""
+    
+    def __init__(self, config_manager):
+        self.config = config_manager
+        self.default_wrap_limit = 3000
+    
+    def split_text_for_processing(self, text: str) -> List[str]:
+        """
+        Divide el texto en chunks para procesamiento
+        
+        Args:
+            text: Texto completo a dividir
+            
+        Returns:
+            Lista de chunks de texto
+        """
+        wrap_limit = self.config.get_int('TEXT_WRAP_LIMIT', self.default_wrap_limit)
+        text_parts = textwrap.wrap(text, wrap_limit)
+        
+        logging.info(f"Texto dividido en {len(text_parts)} partes para procesamiento")
+        return text_parts
+
+
+class SummaryService:
+    """Servicio de generación de resúmenes usando OpenAI"""
+    
+    def __init__(self, config_manager):
+        self.config = config_manager
+        
+        # Configurar OpenAI según la versión
+        api_key = config_manager.get("OPENAI_API_KEY")
+        if api_key:
+            try:
+                # Para OpenAI >= 1.0.0
+                from openai import OpenAI
+                self.client = OpenAI(api_key=api_key)
+                self.is_new_api = True
+            except ImportError:
+                # Para OpenAI < 1.0.0 (API antigua)
+                import openai
+                openai.api_key = api_key
+                self.client = openai
+                self.is_new_api = False
+    
+    def _get_prompt_template(self, language: str) -> str:
+        """Obtiene la plantilla de prompt según el idioma"""
+        templates = {
+            'es': "Resumen:\n\n{text}\n\nResumen:",
+            'en': "Summary:\n\n{text}\n\nSummary:",
+            'fr': "Résumé:\n\n{text}\n\nRésumé:",
+            'de': "Zusammenfassung:\n\n{text}\n\nZusammenfassung:",
+            'it': "Riassunto:\n\n{text}\n\nRiassunto:"
+        }
+        return templates.get(language, templates['es'])
+    
+    @backoff.on_exception(backoff.expo, (Exception,), max_tries=3)
+    def summarize_text(self, text: str, language: str) -> str:
+        """
+        Genera un resumen del texto usando OpenAI
+        
+        Args:
+            text: Texto a resumir
+            language: Idioma del texto
+            
+        Returns:
+            Texto resumido
+        """
+        try:
+            prompt_template = self._get_prompt_template(language)
+            prompt = prompt_template.format(text=text)
+            
+            # Configuración del modelo
+            engine = self.config.get('OPENAI_ENGINE', 'gpt-3.5-turbo-instruct')
+            max_tokens = self.config.get_int('MAX_SUMMARY_TOKENS', 300)
+            temperature = self.config.get_float('SUMMARY_TEMPERATURE', 0.3)
+            
+            logging.info(f"Generando resumen con {engine}")
+            
+            if self.is_new_api:
+                # Nueva API (>= 1.0.0) usando chat completions para modelos más nuevos
+                if 'gpt-3.5-turbo' in engine or 'gpt-4' in engine:
+                    response = self.client.chat.completions.create(
+                        model=engine.replace('-instruct', ''),
+                        messages=[
+                            {"role": "user", "content": prompt}
+                        ],
+                        max_tokens=max_tokens,
+                        temperature=temperature
+                    )
+                    summary = response.choices[0].message.content.strip()
+                else:
+                    # Para modelos de completions como davinci
+                    response = self.client.completions.create(
+                        model=engine,
+                        prompt=prompt,
+                        max_tokens=max_tokens,
+                        temperature=temperature
+                    )
+                    summary = response.choices[0].text.strip()
+            else:
+                # API antigua (< 1.0.0)
+                response = self.client.Completion.create(
+                    engine=engine,
+                    prompt=prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+                summary = response.choices[0].text.strip()
+            
+            logging.info(f"Resumen generado: {len(summary)} caracteres")
+            return summary
+            
+        except Exception as e:
+            logging.error(f"Error generando resumen: {e}")
+            return f"Error generando resumen: {str(e)}"
+    
+    def summarize_text_parts(self, text_parts: List[str], language: str) -> List[str]:
+        """
+        Genera resúmenes de múltiples partes de texto
+        
+        Args:
+            text_parts: Lista de partes de texto
+            language: Idioma del texto
+            
+        Returns:
+            Lista de resúmenes
+        """
+        summaries = []
+        
+        for i, part in enumerate(text_parts, 1):
+            logging.info(f"Generando resumen de la parte {i}/{len(text_parts)}")
+            
+            summary = self.summarize_text(part, language)
+            if summary:
+                summaries.append(summary)
+            else:
+                logging.warning(f"No se pudo generar resumen de la parte {i}")
+        
+        return summaries
+
+
+class TextAnalysisManager:
+    """Gestor principal para análisis de texto"""
+    
+    def __init__(self, config_manager):
+        self.config = config_manager
+        self.language_detector = LanguageDetector(config_manager)
+        self.text_processor = TextProcessor(config_manager)
+        self.summary_service = SummaryService(config_manager)
+    
+    def process_transcript(self, transcript: str, forced_language: Optional[str] = None) -> dict:
+        """
+        Procesa un transcript completo: detecta idioma, divide texto y genera resúmenes
+        
+        Args:
+            transcript: Texto transcrito completo
+            forced_language: Idioma forzado por el usuario
+            
+        Returns:
+            Diccionario con el análisis completo
+        """
+        # Detectar idioma
+        language = self.language_detector.detect_language(transcript, forced_language)
+        
+        # Dividir texto en partes procesables
+        text_parts = self.text_processor.split_text_for_processing(transcript)
+        
+        # Generar resúmenes
+        summaries = self.summary_service.summarize_text_parts(text_parts, language)
+        
+        # Combinar resúmenes
+        final_summary = "\n".join(summaries) if summaries else "No se pudo generar resumen"
+        
+        return {
+            'language': language,
+            'text_parts_count': len(text_parts),
+            'summaries_count': len(summaries),
+            'final_summary': final_summary,
+            'original_transcript': transcript
+        }

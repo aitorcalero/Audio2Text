@@ -1,0 +1,210 @@
+# ===========================================
+# Audio2Text - Configuración de .gitignore
+# ===========================================
+
+# ========== ARCHIVOS SENSIBLES ==========
+# Configuración con API keys (NUNCA subir)
+config.json
+config_*.json
+*.env
+.env*
+
+# API Keys y credenciales
+api_keys.txt
+keys/
+credentials/
+secrets/
+
+# ========== ARCHIVOS DE PYTHON ==========
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# ========== ENTORNOS VIRTUALES ==========
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.ENV/
+.env/
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# ========== ARCHIVOS DE AUDIO ==========
+# Archivos de audio de entrada y salida
+*.mp3
+*.wav
+*.m4a
+*.mp4
+*.aac
+*.flac
+*.ogg
+*.wma
+*.aiff
+*.au
+
+# Carpetas de audio
+audio_input/
+audio_output/
+recordings/
+temp_audio/
+
+# ========== ARCHIVOS DE TEXTO Y LOGS ==========
+# Archivos de salida de transcripción
+*.txt
+transcription_*.txt
+output_*.txt
+transcript_*.txt
+
+# Logs
+*.log
+logs/
+audio_to_text.log
+
+# ========== ARCHIVOS TEMPORALES ==========
+# Archivos temporales del sistema
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archivos temporales de Windows
+*.tmp
+*.temp
+~$*
+
+# ========== EDITORES E IDEs ==========
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ========== ARCHIVOS DE BACKUP ==========
+# Backups
+*.bak
+*.backup
+*.old
+backup/
+backups/
+
+# ========== ARCHIVOS ESPECÍFICOS DEL PROYECTO ==========
+# Carpeta de archivos obsoletos
+old/
+
+# Archivos de prueba
+test_*.py
+*_test.py
+tests/
+
+# Archivos de configuración de desarrollo
+dev_config.json
+local_settings.py
+
+# Outputs de ejemplo
+examples/output/
+sample_output/
+
+# ========== OTROS ==========
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints
+
+# Sphinx documentation
+docs/_build/
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# ========== CONFIGURACIÓN DE EJEMPLO ==========
+# Mantener archivo de ejemplo de configuración
+!config.example.json
+!.env.example
