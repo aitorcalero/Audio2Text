@@ -4,6 +4,7 @@ Soporta OpenAI Whisper y ElevenLabs
 """
 import openai
 import logging
+import os
 from typing import Optional, Protocol
 from abc import ABC, abstractmethod
 import requests
@@ -105,17 +106,21 @@ class ElevenLabsTranscriptionService(TranscriptionService):
                 "xi-api-key": self.api_key
             }
             
-            # ElevenLabs acepta diferentes formatos de audio
+            # ElevenLabs requiere multipart/form-data con model_id obligatorio
             with open(audio_file_path, "rb") as audio_file:
                 files = {
-                    "audio": audio_file,
+                    "file": (os.path.basename(audio_file_path), audio_file, 'audio/mpeg')
                 }
                 data = {
-                    "language": language,
-                    "model_id": "eleven_multilingual_v2"  # Modelo multiidioma de ElevenLabs
+                    "model_id": "scribe_v1"  # Modelo correcto de ElevenLabs
                 }
                 
                 response = requests.post(url, headers=headers, files=files, data=data)
+                
+                # Log de debugging
+                logging.debug(f"Response status: {response.status_code}")
+                logging.debug(f"Response text: {response.text}")
+                
                 response.raise_for_status()
             
             result = response.json()
@@ -126,6 +131,8 @@ class ElevenLabsTranscriptionService(TranscriptionService):
             
         except requests.exceptions.RequestException as e:
             logging.error(f"Error de conexión con ElevenLabs: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                logging.error(f"Response content: {e.response.text}")
             return None
         except Exception as e:
             logging.error(f"Error transcribiendo {audio_file_path} con ElevenLabs: {e}")
