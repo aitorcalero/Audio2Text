@@ -1,105 +1,108 @@
-# Audio2Text - Aplicación de Transcripción de Audio
+# Audio2Text - Transcripción de Audio con IA
 
-Una aplicación robusta y modular para convertir archivos de audio a texto usando IA, con soporte para **OpenAI Whisper** y **ElevenLabs**.
+Aplicación para convertir archivos de audio a texto usando **OpenAI Whisper** y **ElevenLabs**, con interfaz gráfica intuitiva y procesamiento por lotes.
 
-## 🚀 Características
+## ✨ Características Principales
 
-- **Arquitectura modular**: Código separado en módulos especializados
-- **Soporte para ElevenLabs**: Alternativa a OpenAI Whisper para transcripción
-- **Interfaz mejorada**: GUI intuitiva con diálogos de progreso
-- **Manejo de errores mejorado**: Recuperación automática y logging detallado
-- **Configuración flexible**: Fácil cambio entre servicios de transcripción
-- **Procesamiento por lotes**: Soporte para archivos grandes con división automática
+- **Doble soporte de IA**: OpenAI Whisper y ElevenLabs para máxima flexibilidad
+- **Interfaz gráfica**: Selección fácil de servicios y archivos
+- **Procesamiento inteligente**: División automática de archivos grandes
+- **Detección de idioma**: Automática o manual
+- **Resúmenes automáticos**: Generación de resúmenes con GPT
+- **Múltiples formatos**: MP3, WAV, M4A, MP4 y más
 
 ## 📋 Requisitos
 
 - Python 3.7 o superior
-- Clave API de OpenAI (para Whisper y GPT)
-- Clave API de ElevenLabs (opcional, para usar su servicio de transcripción)
+- API Key de OpenAI (para Whisper y resúmenes con GPT)
+- API Key de ElevenLabs (opcional, para transcripción alternativa)
 
-## 🔧 Instalación y Configuración
+## � Instalación Rápida
 
-### 1. Clonar el repositorio
+### 1. Clonar y configurar
 ```bash
-git clone <repository-url>
+git clone https://github.com/aitorcalero/Audio2Text.git
 cd Audio2Text
+python -m venv .venv
 ```
 
-### 2. Crear entorno virtual
+### 2. Activar entorno e instalar
 ```bash
-python -m venv .venv
 # Windows
 .venv\Scripts\activate
-# Linux/Mac
+# Linux/Mac  
 source .venv/bin/activate
-```
 
-### 3. Instalar dependencias
-```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurar API Keys
-
-1. Copia el archivo de configuración de ejemplo:
+### 3. Configurar API Keys
 ```bash
+# Copiar plantilla de configuración
 copy config.example.json config.json
+
+# Editar config.json con tus API keys
 ```
 
-2. Edita `config.json` y añade tus API keys:
+Ejemplo de `config.json`:
 ```json
 {
+{
     "OPENAI_API_KEY": "sk-tu_api_key_de_openai_aqui",
-    "ELEVENLABS_API_KEY": "sk_tu_api_key_de_elevenlabs_aqui",
+    "ELEVENLABS_API_KEY": "sk_tu_api_key_de_elevenlabs_aqui", 
     "TRANSCRIPTION_SERVICE": "openai"
 }
 ```
 
-**⚠️ IMPORTANTE**: Nunca subas el archivo `config.json` a GitHub. Las API keys son privadas.
+**⚠️ IMPORTANTE**: El archivo `config.json` no se sube a GitHub automáticamente para proteger tus API keys.
 
-## 🚀 Uso
+## � Uso de la Aplicación
 
-### Interfaz Gráfica (Recomendado)
+### Modo Gráfico (Recomendado)
 ```bash
 python audio2text_refactored.py
 ```
+1. Selecciona el servicio de transcripción (OpenAI o ElevenLabs)
+2. Elige tu archivo de audio
+3. Selecciona dónde guardar la transcripción
+4. ¡La aplicación procesa automáticamente!
 
-### Línea de Comandos
+### Modo Línea de Comandos
 ```bash
 python audio2text_refactored.py archivo_audio.mp3 salida.txt
 ```
 
-## 📁 Estructura del Proyecto
+## 🎯 Formatos Soportados
+
+**Audio**: MP3, WAV, M4A, MP4, AAC, FLAC, OGG
+**Salida**: TXT con transcripción y resumen automático
+
+## � Configurar API Keys
+
+### OpenAI Whisper
+1. Visita [OpenAI API](https://platform.openai.com/api-keys)
+2. Crea una cuenta y genera tu API key
+3. Agrega créditos para usar Whisper (~$0.006 por minuto)
+
+### ElevenLabs (Alternativa)
+1. Visita [ElevenLabs](https://elevenlabs.io/)
+2. Regístrate y obtén tu API key
+3. Servicio alternativo con diferentes capacidades
+
+## 📁 Estructura de Archivos
 
 ```
 Audio2Text/
-├── audio2text_refactored.py    # Aplicación principal
-├── config_manager.py           # Gestión de configuración
-├── audio_processor.py          # Procesamiento de audio
-├── transcription_services.py   # Servicios de transcripción (OpenAI/ElevenLabs)
-├── text_processing.py          # Procesamiento de texto y resúmenes
-├── output_manager.py           # Gestión de archivos de salida
-├── gui_components_fixed.py     # Interfaz gráfica
-├── simple_dialog.py           # Diálogos simplificados
-├── config.example.json        # Plantilla de configuración
-├── requirements.txt           # Dependencias de Python
-├── .gitignore                # Archivos a ignorar en Git
-└── old/                      # Archivos obsoletos
+├── audio2text_refactored.py    # 🚀 Aplicación principal
+├── config_manager.py           # ⚙️ Configuración
+├── transcription_services.py   # 🎙️ OpenAI + ElevenLabs  
+├── audio_processor.py          # 🎵 Procesamiento de audio
+├── text_processing.py          # 📝 Resúmenes con GPT
+├── gui_components_fixed.py     # 🖥️ Interfaz gráfica
+├── output_manager.py           # 💾 Gestión de archivos
+├── config.example.json         # 📋 Plantilla de configuración
+└── requirements.txt            # 📦 Dependencias Python
 ```
-
-## 🔑 Obtener API Keys
-
-### OpenAI
-1. Ve a [OpenAI API](https://platform.openai.com/api-keys)
-2. Crea una cuenta o inicia sesión
-3. Genera una nueva API key
-4. Cópiala en el campo `OPENAI_API_KEY` del config.json
-
-### ElevenLabs
-1. Ve a [ElevenLabs](https://elevenlabs.io/)
-2. Crea una cuenta o inicia sesión
-3. Ve a tu perfil y obtén tu API key
-4. Cópiala en el campo `ELEVENLABS_API_KEY` del config.json
 
 ## 🔧 Instalación
 
@@ -144,123 +147,59 @@ Ejemplos:
 ```json
 {
     "TRANSCRIPTION_SERVICE": "openai",
-    "OPENAI_API_KEY": "tu_clave_aqui",
-    "WHISPER_MODEL": "whisper-1"
-}
-```
-
-#### ElevenLabs
-```json
-{
-    "TRANSCRIPTION_SERVICE": "elevenlabs",
-    "ELEVENLABS_API_KEY": "tu_clave_aqui"
-}
-```
+## ⚙️ Configuración Avanzada
 
 ### Parámetros Principales
 
 | Parámetro | Descripción | Valor por defecto |
 |-----------|-------------|------------------|
 | `TRANSCRIPTION_SERVICE` | Servicio a usar (`openai` o `elevenlabs`) | `openai` |
-| `FILE_SIZE_LIMIT_MB` | Límite de tamaño antes de dividir archivos | `24` |
+| `FILE_SIZE_LIMIT_MB` | Límite antes de dividir archivos | `24` |
 | `CHUNK_DURATION_MIN` | Duración de chunks en minutos | `10` |
-| `IDIOMA_FORZADO` | Fuerza un idioma específico | `es` |
-| `TEXT_WRAP_LIMIT` | Límite de caracteres por chunk de texto | `3000` |
-| `MAX_SUMMARY_TOKENS` | Tokens máximos para resúmenes | `300` |
+| `IDIOMA_FORZADO` | Idioma específico (`es`, `en`, etc.) | `es` |
+| `WHISPER_MODEL` | Modelo de Whisper a usar | `whisper-1` |
 
-## 📁 Estructura del Proyecto
+## 🎯 Casos de Uso
 
+- **📚 Transcripción de conferencias y reuniones**
+- **🎙️ Conversión de podcasts a texto**
+- **📖 Subtitulado de videos educativos**
+- **📝 Generación de resúmenes automáticos**
+- **🔍 Análisis de contenido de audio**
+
+## 🛠️ Desarrollo y Contribución
+
+### Estructura Modular
 ```
-Audio2Text/
-├── audio2text_refactored.py      # Aplicación principal
-├── config_manager.py             # Gestión de configuración
-├── audio_processor.py            # Procesamiento de audio
-├── transcription_services.py     # Servicios de transcripción (OpenAI/ElevenLabs)
-├── text_processing.py            # Análisis de texto y resúmenes
-├── output_manager.py             # Gestión de archivos de salida
-├── gui_components_fixed.py       # Componentes de interfaz gráfica
-├── config_new.json               # Plantilla de configuración
-├── requirements.txt              # Dependencias
-└── README.md                     # Este archivo
+📁 Módulos principales:
+├── 🎵 audio_processor.py      # Procesamiento de archivos de audio
+├── 🤖 transcription_services  # APIs de OpenAI y ElevenLabs  
+├── 📝 text_processing.py      # Análisis y resúmenes con GPT
+├── 🖥️ gui_components_fixed.py # Interfaz gráfica
+├── ⚙️ config_manager.py       # Gestión de configuración
+└── 💾 output_manager.py       # Archivos de salida
+
+📁 Archivos de prueba: /tests
 ```
 
-## 🔄 Comparación con la Versión Original
+### Para Contribuir
+1. Fork del repositorio
+2. Crear rama feature: `git checkout -b nueva-funcionalidad`
+3. Commit cambios: `git commit -m 'Agregar nueva funcionalidad'`
+4. Push a la rama: `git push origin nueva-funcionalidad`
+5. Crear Pull Request
 
-### Mejoras Arquitectónicas
+## 📄 Licencia
 
-| Aspecto | Original | Refactorizado |
-|---------|----------|---------------|
-| **Estructura** | Monolítico (1 archivo) | Modular (7 módulos) |
-| **Servicios** | Solo OpenAI | OpenAI + ElevenLabs |
-| **Configuración** | Hardcodeada | Clase ConfigManager |
-| **Manejo de errores** | Básico | Robusto con recovery |
-| **Testing** | Difícil | Fácil (módulos independientes) |
-| **Extensibilidad** | Limitada | Alta (patrón Strategy) |
+Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) para más detalles.
 
-### Nuevas Características
+## 🤝 Soporte
 
-1. **Soporte ElevenLabs**: Alternativa moderna para transcripción
-2. **Progreso visual**: Barras de progreso detalladas
-3. **Configuración GUI**: Interfaz para cambiar configuración
-4. **Backup automático**: Respaldo de archivos existentes
-5. **Logging mejorado**: Logs estructurados y detallados
-6. **Validación robusta**: Verificación de archivos y configuración
+- **Issues**: [GitHub Issues](https://github.com/aitorcalero/Audio2Text/issues)
+- **Documentación**: Ver archivos `GITHUB_SETUP.md` y `CONECTAR_GITHUB.md`
+---
 
-## 🔌 Cómo Usar ElevenLabs
-
-1. **Obtener clave API:**
-   - Registrarse en [ElevenLabs](https://elevenlabs.io/)
-   - Ir a Profile → API Keys
-   - Copiar tu clave API
-
-2. **Configurar:**
-   ```json
-   {
-       "TRANSCRIPTION_SERVICE": "elevenlabs",
-       "ELEVENLABS_API_KEY": "tu_clave_elevenlabs"
-   }
-   ```
-
-3. **Ejecutar:**
-   - La aplicación usará automáticamente ElevenLabs para transcripción
-   - OpenAI seguirá siendo usado para los resúmenes
-
-## 🐛 Solución de Problemas
-
-### Error de clave API
-```
-Error en la configuración: ELEVENLABS_API_KEY no está configurado
-```
-**Solución:** Añadir la clave API correcta en `config.json`
-
-### Error de archivo grande
-```
-Error dividiendo el audio
-```
-**Solución:** Verificar que FFmpeg esté instalado para pydub
-
-### Error de conexión
-```
-Error de conexión con ElevenLabs
-```
-**Solución:** Verificar conexión a internet y validez de la clave API
-
-## 📝 Logs
-
-Los logs se guardan automáticamente en `audio_to_text.log` con información detallada sobre:
-- Inicialización de componentes
-- Progreso de transcripción
-- Análisis de texto
-- Errores y advertencias
-
-## 🔮 Futuras Mejoras
-
-- [ ] Soporte para más servicios de IA (Google Cloud, Azure)
-- [ ] Interfaz web con Flask/FastAPI
-- [ ] Procesamiento en tiempo real
-- [ ] Soporte para video (extracción de audio)
-- [ ] Traducción automática
-- [ ] API REST para integración
+**Desarrollado con ❤️ para facilitar la transcripción de audio usando IA**
 
 ## 📄 Licencia
 
