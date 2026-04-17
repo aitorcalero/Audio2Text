@@ -1,110 +1,48 @@
-# Guía para Subir el Proyecto a GitHub
+# Guia para Subir el Proyecto a GitHub
 
-## 🔒 Seguridad
+## Que Debe Subirse
 
-Este proyecto incluye un archivo `.gitignore` que protege automáticamente:
-- ✅ API keys en `config.json`
-- ✅ Archivos de audio personales
-- ✅ Logs y archivos temporales
-- ✅ Entornos virtuales
-- ✅ Cachés de Python
+Archivos principales del proyecto:
 
-## 📋 Pasos para Subir a GitHub
-
-### 1. Inicializar Git (solo la primera vez)
-```bash
-git init
-```
-
-### 2. Añadir archivos seguros
-```bash
-git add .
-```
-
-### 3. Verificar qué se va a subir
-```bash
-git status
-```
-
-**✅ Debería mostrar:**
+- `main.py`
 - `audio2text_refactored.py`
+- `gui_components.py`
+- `simple_dialog.py`
 - `config_manager.py`
 - `audio_processor.py`
 - `transcription_services.py`
 - `text_processing.py`
 - `output_manager.py`
-- `gui_components_fixed.py`
-- `simple_dialog.py`
-- `config.example.json` ⬅️ SIN API keys
+- `config.example.json`
 - `requirements.txt`
+- `audio2text.spec`
+- `build_exe.bat`
 - `README.md`
 - `.gitignore`
 
-**❌ NO debería mostrar:**
-- `config.json` ⬅️ Con API keys reales
-- Archivos `.mp3`, `.wav`, etc.
-- Carpeta `.venv/`
-- Archivos en `old/`
+## Que No Debe Subirse
 
-### 4. Hacer commit
-```bash
-git commit -m "Aplicación Audio2Text refactorizada - versión modular"
-```
+- `config.json`
+- `config-*.json`
+- archivos `*-ESRI-*`
+- `.venv/`, `build/`, `dist/`, `__pycache__/`
+- audios, transcripciones, logs y binarios locales como `ffmpeg.exe`
 
-### 5. Conectar con GitHub
-```bash
-git remote add origin https://github.com/tu-usuario/Audio2Text.git
-```
+## Flujo Recomendado
 
-### 6. Subir código
 ```bash
+git status
+git add .
+git commit -m "Limpiar proyecto y consolidar version actual"
 git push -u origin main
 ```
 
-## 🔧 Configuración para Otros Usuarios
-
-Cuando alguien clone tu repositorio:
-
-1. **Clonar**:
-```bash
-git clone https://github.com/tu-usuario/Audio2Text.git
-cd Audio2Text
-```
-
-2. **Configurar entorno**:
-```bash
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-pip install -r requirements.txt
-```
-
-3. **Configurar API keys**:
-```bash
-copy config.example.json config.json
-# Editar config.json con sus propias API keys
-```
-
-## ⚠️ Recordatorios Importantes
-
-- ✅ **NUNCA** hagas `git add config.json` directamente
-- ✅ **SIEMPRE** usa `config.example.json` como plantilla
-- ✅ **REVISA** `git status` antes de hacer commit
-- ✅ **MANTÉN** actualizado el `.gitignore`
-
-## 🚀 Comandos Útiles
+## Verificaciones Utiles
 
 ```bash
-# Ver estado
-git status
-
-# Ver qué archivos están siendo ignorados
+git check-ignore config.json
+git check-ignore ffmpeg.exe
 git ls-files --others --ignored --exclude-standard
-
-# Verificar que config.json NO aparece
-git check-ignore config.json  # Debería decir "config.json"
-
-# Añadir cambios
-git add .
-git commit -m "Descripción de cambios"
-git push
 ```
+
+Si `git status` muestra `config.json` o archivos `*-ESRI-*`, revisa `.gitignore` antes de hacer el push.

@@ -64,32 +64,50 @@ class ProgressDialog:
     
     def update_status(self, message: str):
         """Actualiza el mensaje de estado"""
+        def _update():
+            try:
+                if self.root and self.root.winfo_exists():
+                    self.status_label.config(text=message)
+                    self.root.update()
+            except tk.TclError:
+                pass
+        
         try:
             if self.root and self.root.winfo_exists():
-                self.status_label.config(text=message)
-                self.root.update()
+                self.root.after(0, _update)
         except tk.TclError:
-            # Ventana ya destruida
             pass
     
     def set_determinate_progress(self, maximum: int):
         """Cambia a progreso determinado"""
+        def _set_det():
+            try:
+                if self.root and self.root.winfo_exists():
+                    self.progress_bar.stop()
+                    self.progress_bar.config(mode='determinate', maximum=maximum, value=0)
+            except tk.TclError:
+                pass
+                
         try:
             if self.root and self.root.winfo_exists():
-                self.progress_bar.stop()
-                self.progress_bar.config(mode='determinate', maximum=maximum, value=0)
+                self.root.after(0, _set_det)
         except tk.TclError:
-            # Ventana ya destruida
             pass
     
     def update_progress(self, value: int):
         """Actualiza el valor del progreso"""
+        def _update_prog():
+            try:
+                if self.root and self.root.winfo_exists():
+                    self.progress_bar.config(value=value)
+                    self.root.update()
+            except tk.TclError:
+                pass
+                
         try:
             if self.root and self.root.winfo_exists():
-                self.progress_bar.config(value=value)
-                self.root.update()
+                self.root.after(0, _update_prog)
         except tk.TclError:
-            # Ventana ya destruida
             pass
     
     def cancel(self):
@@ -103,6 +121,10 @@ class ProgressDialog:
             if hasattr(self, 'progress_bar'):
                 self.progress_bar.stop()
             if hasattr(self, 'root') and self.root:
+                try:
+                    self.root.quit()
+                except Exception:
+                    pass
                 self.root.destroy()
         except tk.TclError:
             # Ventana ya destruida
@@ -110,6 +132,103 @@ class ProgressDialog:
         except Exception:
             # Cualquier otro error al cerrar
             pass
+
+
+class APIKeysDialog:
+    """Diálogo para solicitar las claves API en el primer inicio"""
+    
+    def __init__(self, parent=None):
+        self.root = tk.Toplevel(parent) if parent else tk.Tk()
+        self.root.title("Configuración Inicial de API Keys")
+        self.root.geometry("500x300")
+        self.root.resizable(False, False)
+        self.result = None
+        
+        # Centrar ventana
+        self.root.update_idletasks()
+        x = (self.root.winfo_screenwidth() // 2) - (500 // 2)
+        y = (self.root.winfo_screenheight() // 2) - (300 // 2)
+        self.root.geometry(f"+{x}+{y}")
+        
+        self.setup_widgets()
+        
+        # Traer al frente
+        self.root.attributes('-topmost', True)
+        self.root.lift()
+        self.root.focus_force()
+        self.root.after(100, lambda: self.root.attributes('-topmost', False))
+        
+        # Protocolos
+        self.root.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.root.bind('<Return>', lambda e: self.accept())
+        self.root.bind('<Escape>', lambda e: self.cancel())
+        
+        if parent:
+            self.root.transient(parent)
+            self.root.grab_set()
+
+    def setup_widgets(self):
+        main_frame = ttk.Frame(self.root, padding="20")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(
+            main_frame, 
+            text="Bienvenido a Audio2Text", 
+            font=('Arial', 14, 'bold')
+        ).pack(pady=(0, 10))
+        
+        ttk.Label(
+            main_frame,
+            text="Para usar la aplicación necesitas configurar al menos una clave API.\n"
+                 "Rellena una o ambas y presiona Guardar.",
+            justify=tk.LEFT
+        ).pack(fill=tk.X, pady=(0, 20))
+        
+        # Grilla para los inputs
+        input_frame = ttk.Frame(main_frame)
+        input_frame.pack(fill=tk.X)
+        
+        # OpenAI
+        ttk.Label(input_frame, text="OpenAI API Key:").grid(row=0, column=0, sticky=tk.W, pady=5)
+        self.openai_var = tk.StringVar()
+        ttk.Entry(input_frame, textvariable=self.openai_var, width=45, show="*").grid(row=0, column=1, padx=10, pady=5)
+        
+        # ElevenLabs
+        ttk.Label(input_frame, text="ElevenLabs API Key:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        self.elevenlabs_var = tk.StringVar()
+        ttk.Entry(input_frame, textvariable=self.elevenlabs_var, width=45, show="*").grid(row=1, column=1, padx=10, pady=5)
+        
+        # Botones
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(20, 0))
+        
+        self.btn_cancel = ttk.Button(btn_frame, text="Salir", command=self.cancel)
+        self.btn_cancel.pack(side=tk.RIGHT, padx=5)
+        
+        self.btn_save = ttk.Button(btn_frame, text="Guardar y Continuar", command=self.accept)
+        self.btn_save.pack(side=tk.RIGHT, padx=5)
+
+    def accept(self):
+        openai_key = self.openai_var.get().strip()
+        elevenlabs_key = self.elevenlabs_var.get().strip()
+        
+        if not openai_key and not elevenlabs_key:
+            messagebox.showwarning("Faltan Claves", "Debes ingresar al menos una clave API para continuar.", parent=self.root)
+            return
+            
+        self.result = {
+            "OPENAI_API_KEY": openai_key,
+            "ELEVENLABS_API_KEY": elevenlabs_key
+        }
+        self.root.destroy()
+        
+    def cancel(self):
+        self.result = None
+        self.root.destroy()
+        
+    def show(self) -> dict:
+        self.root.mainloop()
+        return self.result
 
 
 class FileSelector:
@@ -627,17 +746,8 @@ class GUIManager:
         self.config = config_manager
         
     def ask_force_language(self) -> Optional[str]:
-        """Pregunta al usuario si quiere forzar el idioma"""
-        root = tk.Tk()
-        root.withdraw()
-        
-        response = messagebox.askyesno(
-            "Forzar idioma", 
-            "¿Deseas forzar el idioma a español?"
-        )
-        
-        root.destroy()
-        return "es" if response else None
+        """Ya no preguntamos al usuario si quiere forzar el idioma"""
+        return None
     
     def get_user_files(self) -> tuple:
         """Obtiene los archivos de entrada y salida del usuario"""

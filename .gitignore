@@ -6,6 +6,7 @@
 # Configuración con API keys (NUNCA subir)
 config.json
 config_*.json
+config-*.json
 *.env
 .env*
 
@@ -44,6 +45,7 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
+!audio2text.spec
 
 # Installer logs
 pip-log.txt
@@ -166,6 +168,8 @@ backups/
 # ========== ARCHIVOS ESPECÍFICOS DEL PROYECTO ==========
 # Carpeta de archivos obsoletos
 old/
+*-ESRI-*
+ffmpeg.exe
 
 # Archivos de prueba
 test_*.py
@@ -208,3 +212,5 @@ cython_debug/
 # Mantener archivo de ejemplo de configuración
 !config.example.json
 !.env.example
+
+

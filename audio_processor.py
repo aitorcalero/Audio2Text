@@ -2,9 +2,20 @@
 Procesador de audio para la aplicación Audio2Text
 """
 import os
+import sys
 import logging
+from pathlib import Path
 from typing import List, Optional
-from pydub import AudioSegment
+import subprocess
+from pydub import AudioSegment, effects
+import pydub.utils as pydub_utils
+
+
+def _get_base_path() -> Path:
+    """Ruta base del bundle (PyInstaller compatible)."""
+    if getattr(sys, "_MEIPASS", None):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parent
 
 
 class AudioProcessor:
@@ -12,6 +23,59 @@ class AudioProcessor:
     
     def __init__(self, config_manager):
         self.config = config_manager
+        self._configure_ffmpeg()
+    
+    def _configure_ffmpeg(self):
+        """
+        Ajusta la ruta de ffmpeg para pydub. Útil cuando se distribuye como .exe.
+        """
+        ffmpeg_env = os.environ.get("FFMPEG_BINARY")
+        bundled_ffmpeg = _get_base_path() / "ffmpeg.exe"
+        exe_sibling_ffmpeg = Path(sys.executable).with_name("ffmpeg.exe")
+        choco_real_ffmpeg = Path(r"C:\ProgramData\chocolatey\lib\ffmpeg\tools\ffmpeg\bin\ffmpeg.exe")
+        
+        try:
+            if ffmpeg_env and Path(ffmpeg_env).exists():
+                AudioSegment.converter = ffmpeg_env
+                logging.info(f"Usando ffmpeg desde FFMPEG_BINARY: {ffmpeg_env}")
+            elif exe_sibling_ffmpeg.exists():
+                AudioSegment.converter = str(exe_sibling_ffmpeg)
+                logging.info(f"Usando ffmpeg junto al ejecutable: {exe_sibling_ffmpeg}")
+            elif bundled_ffmpeg.exists():
+                AudioSegment.converter = str(bundled_ffmpeg)
+                logging.info(f"Usando ffmpeg incluido: {bundled_ffmpeg}")
+            elif choco_real_ffmpeg.exists():
+                AudioSegment.converter = str(choco_real_ffmpeg)
+                logging.info(f"Usando ffmpeg real de Chocolatey: {choco_real_ffmpeg}")
+            else:
+                logging.info("ffmpeg no encontrado; se usará el del sistema si está en PATH (puede mostrar consola).")
+        except Exception as e:
+            logging.warning(f"No se pudo configurar ffmpeg: {e}")
+
+        # Forzar ffmpeg sin ventana de consola en Windows
+        try:
+            if os.name == "nt":
+                original_popen = subprocess.Popen
+
+                def quiet_popen(cmd, *args, **kwargs):
+                    try:
+                        cmd_text = " ".join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+                        if "ffmpeg" in cmd_text.lower():
+                            creationflags = kwargs.pop("creationflags", 0) | subprocess.CREATE_NO_WINDOW
+                            si = kwargs.get("startupinfo") or subprocess.STARTUPINFO()
+                            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                            kwargs["creationflags"] = creationflags
+                            kwargs["startupinfo"] = si
+                    except Exception:
+                        pass
+                    return original_popen(cmd, *args, **kwargs)
+
+                # Parchea tanto subprocess como la copia que usa pydub
+                subprocess.Popen = quiet_popen
+                pydub_utils.subprocess.Popen = quiet_popen
+                logging.info("Subproceso de ffmpeg configurado para no mostrar ventana en Windows")
+        except Exception as e:
+            logging.warning(f"No se pudo suprimir la ventana de ffmpeg: {e}")
         
     def get_file_size_mb(self, file_path: str) -> float:
         """Obtiene el tamaño del archivo en MB"""
@@ -66,7 +130,7 @@ class AudioProcessor:
     
     def prepare_audio_segments(self, input_file: str) -> List[str]:
         """
-        Prepara los segmentos de audio para procesar
+        Prepara los segmentos de audio para procesar, aplicando normalización de volumen
         
         Args:
             input_file: Ruta del archivo de audio original
@@ -76,17 +140,38 @@ class AudioProcessor:
         """
         if not os.path.exists(input_file):
             raise FileNotFoundError(f"Archivo de audio no encontrado: {input_file}")
+            
+        logging.info(f"Normalizando volumen del audio: {input_file}")
+        try:
+            audio = AudioSegment.from_file(input_file)
+            normalized_audio = effects.normalize(audio)
+            
+            # Save normalized temp file
+            base_name = os.path.splitext(input_file)[0]
+            normalized_file = f"{base_name}_normalized.mp3"
+            normalized_audio.export(normalized_file, format="mp3")
+            logging.info(f"Audio normalizado guardado en: {normalized_file}")
+        except Exception as e:
+            logging.error(f"Error normalizando el audio: {e}. Usando original en su lugar.")
+            normalized_file = input_file
         
-        if self.needs_splitting(input_file):
+        if self.needs_splitting(normalized_file):
             chunk_duration = self.config.get_int("CHUNK_DURATION_MIN", 10)
-            chunk_files = self.split_audio_by_duration(input_file, chunk_duration)
+            chunk_files = self.split_audio_by_duration(normalized_file, chunk_duration)
+            
+            # Remove normalized file if we split it into multiple chunks
+            if normalized_file != input_file and os.path.exists(normalized_file):
+                try:
+                    os.remove(normalized_file)
+                except Exception as e:
+                    logging.warning(f"No se pudo eliminar el archivo normalizado temporal: {e}")
             
             if chunk_files is None:
                 raise RuntimeError("No se pudieron crear los chunks de audio")
             
             return chunk_files
         else:
-            return [input_file]
+            return [normalized_file]
     
     def cleanup_temporary_files(self, file_list: List[str], original_file: str):
         """

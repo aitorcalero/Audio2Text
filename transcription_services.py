@@ -9,6 +9,8 @@ from typing import Optional, Protocol
 from abc import ABC, abstractmethod
 import requests
 import json
+import backoff
+import concurrent.futures
 
 
 class TranscriptionService(ABC):
@@ -20,6 +22,16 @@ class TranscriptionService(ABC):
         pass
 
 
+class MissingConfigTranscriptionService(TranscriptionService):
+    """Servicio placeholder cuando faltan credenciales."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+
+    def transcribe(self, audio_file_path: str, language: str = "es") -> Optional[str]:
+        raise RuntimeError(self.reason)
+
+
 class OpenAITranscriptionService(TranscriptionService):
     """Servicio de transcripción usando OpenAI Whisper"""
     
@@ -27,19 +39,10 @@ class OpenAITranscriptionService(TranscriptionService):
         self.api_key = api_key
         self.model = model
         
-        # Configurar el cliente OpenAI según la versión
-        try:
-            # Para OpenAI >= 1.0.0
-            from openai import OpenAI
-            self.client = OpenAI(api_key=api_key)
-            self.is_new_api = True
-        except ImportError:
-            # Para OpenAI < 1.0.0 (API antigua)
-            import openai
-            openai.api_key = api_key
-            self.client = openai
-            self.is_new_api = False
+        from openai import OpenAI
+        self.client = OpenAI(api_key=api_key)
     
+    @backoff.on_exception(backoff.expo, Exception, max_tries=3)
     def transcribe(self, audio_file_path: str, language: str = "es") -> Optional[str]:
         """
         Transcribe audio usando OpenAI Whisper
@@ -55,22 +58,12 @@ class OpenAITranscriptionService(TranscriptionService):
             logging.info(f"Transcribiendo con OpenAI Whisper: {audio_file_path}")
             
             with open(audio_file_path, "rb") as audio_file:
-                if self.is_new_api:
-                    # Nueva API (>= 1.0.0)
-                    transcript = self.client.audio.transcriptions.create(
-                        model=self.model,
-                        file=audio_file,
-                        language=language
-                    )
-                    text_result = transcript.text
-                else:
-                    # API antigua (< 1.0.0)
-                    transcript = self.client.Audio.transcribe(
-                        self.model, 
-                        audio_file, 
-                        language=language
-                    )
-                    text_result = transcript.text
+                transcript = self.client.audio.transcriptions.create(
+                    model=self.model,
+                    file=audio_file,
+                    language=language
+                )
+                text_result = transcript.text
             
             logging.info(f"Transcripción completada: {len(text_result)} caracteres")
             return text_result
@@ -87,6 +80,7 @@ class ElevenLabsTranscriptionService(TranscriptionService):
         self.api_key = api_key
         self.base_url = "https://api.elevenlabs.io/v1"
     
+    @backoff.on_exception(backoff.expo, (requests.exceptions.RequestException, Exception), max_tries=3)
     def transcribe(self, audio_file_path: str, language: str = "es") -> Optional[str]:
         """
         Transcribe audio usando ElevenLabs
@@ -157,7 +151,7 @@ class TranscriptionServiceFactory:
         if service_type.lower() == "openai":
             api_key = config_manager.get("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("OPENAI_API_KEY no está configurado")
+                return MissingConfigTranscriptionService("OPENAI_API_KEY no está configurada. Añádela en config.json o variable de entorno.")
             
             model = config_manager.get("WHISPER_MODEL", "whisper-1")
             return OpenAITranscriptionService(api_key, model)
@@ -165,7 +159,7 @@ class TranscriptionServiceFactory:
         elif service_type.lower() == "elevenlabs":
             api_key = config_manager.get("ELEVENLABS_API_KEY")
             if not api_key:
-                raise ValueError("ELEVENLABS_API_KEY no está configurado")
+                return MissingConfigTranscriptionService("ELEVENLABS_API_KEY no está configurada. Añádela en config.json o variable de entorno.")
             
             return ElevenLabsTranscriptionService(api_key)
         
@@ -185,30 +179,43 @@ class TranscriptionManager:
     
     def transcribe_audio_segments(self, audio_files: list, language: str = "es") -> list:
         """
-        Transcribe múltiples segmentos de audio
+        Transcribe múltiples segmentos de audio concurrentemente
         
         Args:
             audio_files: Lista de rutas de archivos de audio
             language: Código de idioma
             
         Returns:
-            Lista de transcripciones
+            Lista de transcripciones en el mismo orden
         """
-        transcripts = []
+        transcripts = [None] * len(audio_files)
         
-        for i, audio_file in enumerate(audio_files, 1):
-            logging.info(f"Procesando segmento {i}/{len(audio_files)}: {audio_file}")
-            
+        def process_segment(index: int, audio_file: str):
+            logging.info(f"Procesando segmento {index + 1}/{len(audio_files)}: {audio_file}")
             transcript = self.service.transcribe(audio_file, language)
             
             if transcript:
-                transcripts.append(transcript)
-                logging.info(f"Segmento {i} transcrito exitosamente")
+                logging.info(f"Segmento {index + 1} transcrito exitosamente")
             else:
-                logging.warning(f"No se pudo transcribir el segmento {i}: {audio_file}")
-                # Continuar con el siguiente segmento
+                logging.warning(f"No se pudo transcribir el segmento {index + 1}: {audio_file}")
+            
+            return index, transcript
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(process_segment, i, f) 
+                for i, f in enumerate(audio_files)
+            ]
+            
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    index, transcript = future.result()
+                    transcripts[index] = transcript
+                except Exception as e:
+                    logging.error(f"Error procesando segmento asíncrono: {e}")
         
-        return transcripts
+        # Filtrar posibles fallos (None)
+        return [t for t in transcripts if t is not None]
     
     def get_full_transcript(self, audio_files: list, language: str = "es") -> str:
         """

@@ -3,6 +3,7 @@ Servicios de procesamiento de texto y resumen
 """
 import openai
 import logging
+import re
 import textwrap
 from typing import List, Optional
 import backoff
@@ -66,7 +67,30 @@ class TextProcessor:
             Lista de chunks de texto
         """
         wrap_limit = self.config.get_int('TEXT_WRAP_LIMIT', self.default_wrap_limit)
-        text_parts = textwrap.wrap(text, wrap_limit)
+        
+        # Split by common sentence delimiters to avoid cutting words/ideas mid-sentence
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        
+        text_parts = []
+        current_part = ""
+        
+        for sentence in sentences:
+            if len(current_part) + len(sentence) <= wrap_limit:
+                current_part += sentence + " "
+            else:
+                if current_part:
+                    text_parts.append(current_part.strip())
+                
+                # If a single sentence is still larger than the wrap limit, fallback to textwrap for that sentence
+                if len(sentence) > wrap_limit:
+                    wrapped_sentences = textwrap.wrap(sentence, wrap_limit)
+                    text_parts.extend(wrapped_sentences[:-1])
+                    current_part = wrapped_sentences[-1] + " "
+                else:
+                    current_part = sentence + " "
+                    
+        if current_part.strip():
+            text_parts.append(current_part.strip())
         
         logging.info(f"Texto dividido en {len(text_parts)} partes para procesamiento")
         return text_parts
@@ -77,21 +101,16 @@ class SummaryService:
     
     def __init__(self, config_manager):
         self.config = config_manager
+        self.client = None
+        self.enabled = False
         
-        # Configurar OpenAI según la versión
         api_key = config_manager.get("OPENAI_API_KEY")
         if api_key:
-            try:
-                # Para OpenAI >= 1.0.0
-                from openai import OpenAI
-                self.client = OpenAI(api_key=api_key)
-                self.is_new_api = True
-            except ImportError:
-                # Para OpenAI < 1.0.0 (API antigua)
-                import openai
-                openai.api_key = api_key
-                self.client = openai
-                self.is_new_api = False
+            from openai import OpenAI
+            self.client = OpenAI(api_key=api_key)
+            self.enabled = True
+        else:
+            logging.warning("OPENAI_API_KEY no configurada. Se omite la generación de resúmenes.")
     
     def _get_prompt_template(self, language: str) -> str:
         """Obtiene la plantilla de prompt según el idioma"""
@@ -117,44 +136,37 @@ class SummaryService:
             Texto resumido
         """
         try:
+            if not self.enabled or not self.client:
+                return "Resumen no generado (falta OPENAI_API_KEY)"
+            
             prompt_template = self._get_prompt_template(language)
             prompt = prompt_template.format(text=text)
             
             # Configuración del modelo
-            engine = self.config.get('OPENAI_ENGINE', 'gpt-3.5-turbo-instruct')
+            engine = self.config.get('OPENAI_ENGINE', 'gpt-4o-mini')
             max_tokens = self.config.get_int('MAX_SUMMARY_TOKENS', 300)
             temperature = self.config.get_float('SUMMARY_TEMPERATURE', 0.3)
             
             logging.info(f"Generando resumen con {engine}")
             
-            if self.is_new_api:
-                # Nueva API (>= 1.0.0) usando chat completions para modelos más nuevos
-                if 'gpt-3.5-turbo' in engine or 'gpt-4' in engine:
-                    response = self.client.chat.completions.create(
-                        model=engine.replace('-instruct', ''),
-                        messages=[
-                            {"role": "user", "content": prompt}
-                        ],
-                        max_tokens=max_tokens,
-                        temperature=temperature
-                    )
-                    summary = response.choices[0].message.content.strip()
-                else:
-                    # Para modelos de completions como davinci
-                    response = self.client.completions.create(
-                        model=engine,
-                        prompt=prompt,
-                        max_tokens=max_tokens,
-                        temperature=temperature
-                    )
-                    summary = response.choices[0].text.strip()
+            # Usando siempre la API >= 1.0.0
+            if 'gpt-' in engine:
+                response = self.client.chat.completions.create(
+                    model=engine,
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=max_tokens,
+                    temperature=temperature
+                )
+                summary = response.choices[0].message.content.strip()
             else:
-                # API antigua (< 1.0.0)
-                response = self.client.Completion.create(
-                    engine=engine,
+                # Fallback para modelos de completions viejos (davinci etc)
+                response = self.client.completions.create(
+                    model=engine,
                     prompt=prompt,
-                    temperature=temperature,
-                    max_tokens=max_tokens
+                    max_tokens=max_tokens,
+                    temperature=temperature
                 )
                 summary = response.choices[0].text.strip()
             
