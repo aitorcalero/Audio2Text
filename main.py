@@ -114,7 +114,7 @@ class Audio2TextProcessor:
             True si el procesamiento fue exitoso, False en caso contrario
         """
         try:
-            logging.info(f"Iniciando procesamiento de: {input_file}")
+            logging.info(f"Iniciando procesamiento de: {Path(input_file).name}")
             
             # Paso 1: Preparar segmentos de audio
             if progress_callback:
@@ -153,7 +153,7 @@ class Audio2TextProcessor:
             success = self.output_manager.save_transcription(output_file, analysis_result)
             
             if success:
-                logging.info(f"Procesamiento completado exitosamente: {output_file}")
+                logging.info(f"Procesamiento completado exitosamente: {Path(output_file).name}")
                 
                 # Abrir archivo de salida
                 self.output_manager.open_output_file(output_file)

@@ -98,6 +98,13 @@ class TextProcessor:
 
 class SummaryService:
     """Servicio de generación de resúmenes usando OpenAI"""
+    LEGACY_COMPLETION_MODEL_PREFIXES = (
+        "text-",
+        "davinci",
+        "curie",
+        "babbage",
+        "ada",
+    )
     
     def __init__(self, config_manager):
         self.config = config_manager
@@ -122,6 +129,69 @@ class SummaryService:
             'it': "Riassunto:\n\n{text}\n\nRiassunto:"
         }
         return templates.get(language, templates['es'])
+
+    def _should_use_chat_completions(self, engine: str) -> bool:
+        """Decide el endpoint correcto según el nombre del modelo configurado."""
+        normalized_engine = (engine or "").strip().lower()
+
+        if not normalized_engine:
+            return True
+
+        if "instruct" in normalized_engine:
+            return False
+
+        if normalized_engine.startswith(self.LEGACY_COMPLETION_MODEL_PREFIXES):
+            return False
+
+        return True
+
+    def _is_chat_endpoint_mismatch(self, error: Exception) -> bool:
+        """Detecta si el modelo no es compatible con chat.completions."""
+        error_message = str(error).lower()
+        return (
+            "not a chat model" in error_message
+            or "use v1/completions" in error_message
+        )
+
+    def _is_completion_endpoint_mismatch(self, error: Exception) -> bool:
+        """Detecta si el modelo no es compatible con completions."""
+        error_message = str(error).lower()
+        return (
+            "not supported in the v1/completions endpoint" in error_message
+            or "use v1/chat/completions" in error_message
+        )
+
+    def _create_chat_summary(
+        self,
+        engine: str,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        response = self.client.chat.completions.create(
+            model=engine,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        return (response.choices[0].message.content or "").strip()
+
+    def _create_completion_summary(
+        self,
+        engine: str,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+    ) -> str:
+        response = self.client.completions.create(
+            model=engine,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature
+        )
+        return response.choices[0].text.strip()
     
     @backoff.on_exception(backoff.expo, (Exception,), max_tries=3)
     def summarize_text(self, text: str, language: str) -> str:
@@ -147,28 +217,51 @@ class SummaryService:
             max_tokens = self.config.get_int('MAX_SUMMARY_TOKENS', 300)
             temperature = self.config.get_float('SUMMARY_TEMPERATURE', 0.3)
             
-            logging.info(f"Generando resumen con {engine}")
-            
-            # Usando siempre la API >= 1.0.0
-            if 'gpt-' in engine:
-                response = self.client.chat.completions.create(
-                    model=engine,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                )
-                summary = response.choices[0].message.content.strip()
-            else:
-                # Fallback para modelos de completions viejos (davinci etc)
-                response = self.client.completions.create(
-                    model=engine,
-                    prompt=prompt,
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                )
-                summary = response.choices[0].text.strip()
+            use_chat_endpoint = self._should_use_chat_completions(engine)
+            endpoint_name = "chat.completions" if use_chat_endpoint else "completions"
+
+            logging.info(f"Generando resumen con {engine} usando {endpoint_name}")
+
+            try:
+                if use_chat_endpoint:
+                    summary = self._create_chat_summary(
+                        engine,
+                        prompt,
+                        max_tokens,
+                        temperature,
+                    )
+                else:
+                    summary = self._create_completion_summary(
+                        engine,
+                        prompt,
+                        max_tokens,
+                        temperature,
+                    )
+            except Exception as endpoint_error:
+                if use_chat_endpoint and self._is_chat_endpoint_mismatch(endpoint_error):
+                    logging.warning(
+                        "El modelo %s rechazo chat.completions; reintentando con completions",
+                        engine,
+                    )
+                    summary = self._create_completion_summary(
+                        engine,
+                        prompt,
+                        max_tokens,
+                        temperature,
+                    )
+                elif not use_chat_endpoint and self._is_completion_endpoint_mismatch(endpoint_error):
+                    logging.warning(
+                        "El modelo %s rechazo completions; reintentando con chat.completions",
+                        engine,
+                    )
+                    summary = self._create_chat_summary(
+                        engine,
+                        prompt,
+                        max_tokens,
+                        temperature,
+                    )
+                else:
+                    raise
             
             logging.info(f"Resumen generado: {len(summary)} caracteres")
             return summary

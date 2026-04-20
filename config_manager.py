@@ -20,6 +20,7 @@ def _get_base_path() -> Path:
 
 class ConfigManager:
     """Maneja la configuración de la aplicación"""
+    MAX_CONFIG_SIZE_BYTES = 1024 * 1024
     
     def __init__(self, config_file: str = "config.json"):
         self.config_file = config_file
@@ -72,20 +73,59 @@ class ConfigManager:
         for path in self._candidate_paths():
             try:
                 if path.exists():
-                    with open(path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    logging.info(f"Configuración cargada desde: {path}")
+                    if not self._is_supported_config_path(path):
+                        continue
+                    data = self._load_json_config(path)
+                    logging.info(f"Configuración cargada desde: {path.name}")
                     default_config.update(data or {})
                     return default_config
             except json.JSONDecodeError as e:
-                logging.error(f"Error al parsear el archivo de configuración ({path}): {e}")
+                logging.error(f"Error al parsear el archivo de configuración ({path.name}): {e}")
                 break  # No seguir buscando si el archivo existe pero está corrupto
+            except ValueError as e:
+                logging.error(f"Configuración inválida en {path.name}: {e}")
+                break
             except Exception as e:
-                logging.error(f"No se pudo leer la configuración en {path}: {e}")
+                logging.error(f"No se pudo leer la configuración en {path.name}: {e}")
                 continue
         
-        logging.warning("Usando configuración por defecto al no encontrar config.json")
+        logging.warning(f"Usando configuración por defecto al no encontrar {self.config_file}")
         return default_config
+
+    def _is_supported_config_path(self, path: Path) -> bool:
+        """
+        Acepta solo archivos JSON pequeños. Esto evita intentar leer binarios
+        o archivos enormes como si fueran configuración de texto.
+        """
+        if not path.is_file():
+            logging.warning(f"Se omite {path.name}: no es un archivo regular")
+            return False
+
+        if path.suffix.lower() != ".json":
+            logging.warning(f"Se omite {path.name}: extensión no soportada para configuración")
+            return False
+
+        size_bytes = path.stat().st_size
+        if size_bytes > self.MAX_CONFIG_SIZE_BYTES:
+            logging.warning(
+                "Se omite %s: tamaño %s bytes supera el máximo permitido de %s bytes",
+                path.name,
+                size_bytes,
+                self.MAX_CONFIG_SIZE_BYTES,
+            )
+            return False
+
+        return True
+
+    def _load_json_config(self, path: Path) -> Dict[str, Any]:
+        """Carga un archivo JSON de configuración ya validado."""
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("el archivo debe contener un objeto JSON")
+
+        return data
     
     def _validate_config(self):
         """
@@ -122,10 +162,10 @@ class ConfigManager:
         try:
             with open(save_path, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=4, ensure_ascii=False)
-            logging.info(f"Configuración guardada en: {save_path}")
+            logging.info(f"Configuración guardada en: {save_path.name}")
             return True
         except Exception as e:
-            logging.error(f"No se pudo guardar la configuración en {save_path}: {e}")
+            logging.error(f"No se pudo guardar la configuración en {save_path.name}: {e}")
             return False
     
     def get(self, key: str, default=None):

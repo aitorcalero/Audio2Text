@@ -1,4 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
 import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files
@@ -12,11 +13,18 @@ here = Path.cwd()
 datas = collect_data_files("langdetect")
 datas.append((str(here / "config.example.json"), "."))
 
-# Binarios adicionales: ffmpeg opcional si está junto al proyecto
+# Binarios adicionales: ffmpeg solo si se solicita explícitamente
 binaries = []
-ffmpeg_path = here / "ffmpeg.exe"
-if ffmpeg_path.exists():
-    binaries.append((str(ffmpeg_path), "."))
+bundle_ffmpeg = os.environ.get("AUDIO2TEXT_BUNDLE_FFMPEG", "").lower() in {"1", "true", "yes", "on"}
+ffmpeg_override = os.environ.get("AUDIO2TEXT_FFMPEG_PATH")
+
+if bundle_ffmpeg:
+    ffmpeg_path = Path(ffmpeg_override) if ffmpeg_override else here / "ffmpeg.exe"
+    if ffmpeg_path.name.lower() != "ffmpeg.exe":
+        raise SystemExit("AUDIO2TEXT_FFMPEG_PATH debe apuntar a un archivo llamado ffmpeg.exe")
+    if not ffmpeg_path.exists():
+        raise SystemExit("AUDIO2TEXT_BUNDLE_FFMPEG está activo pero no se encontró ffmpeg.exe")
+    binaries.append((str(ffmpeg_path.resolve()), "."))
 
 a = Analysis(
     ["main.py"],

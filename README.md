@@ -16,6 +16,7 @@ Aplicacion de escritorio y linea de comandos para transcribir audio con OpenAI W
 - Modo CLI para automatizar ejecuciones.
 - Normalizacion de audio y division automatica de archivos grandes.
 - Resumenes opcionales con OpenAI.
+- Salidas limitadas a formatos de texto seguros (`.txt` y `.md`).
 - Empaquetado con PyInstaller.
 
 ## Requisitos
@@ -90,6 +91,7 @@ python main.py input.wav output.txt es
 ```
 
 El tercer argumento es opcional y permite forzar el idioma.
+La salida debe guardarse como `.txt` o `.md`.
 
 ## Logs
 
@@ -97,6 +99,14 @@ En Windows, el log de la aplicacion se escribe en:
 
 ```text
 %LOCALAPPDATA%\Audio2Text\logs\audio2text.log
+```
+
+## Pruebas Unitarias
+
+La suite versionada cubre la carga segura de configuracion para evitar lecturas indebidas de archivos no JSON o demasiado grandes.
+
+```bash
+python -m unittest discover -s unit_tests -p "unit_*.py"
 ```
 
 ## Build Windows
@@ -109,6 +119,15 @@ Salida esperada:
 
 ```text
 dist\Audio2Text\Audio2Text.exe
+```
+
+Por seguridad, `ffmpeg.exe` no se empaqueta automaticamente aunque exista en la raiz del proyecto.
+Si quieres incluirlo de forma explicita:
+
+```bash
+set AUDIO2TEXT_BUNDLE_FFMPEG=1
+set AUDIO2TEXT_FFMPEG_PATH=C:\ruta\verificada\ffmpeg.exe
+build_exe.bat
 ```
 
 ## Estructura Principal

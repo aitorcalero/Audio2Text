@@ -4,14 +4,24 @@ Gestor de archivos de salida para la aplicación Audio2Text
 import os
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 
 class OutputFileManager:
     """Maneja la creación y guardado de archivos de salida"""
+
+    ALLOWED_OUTPUT_EXTENSIONS = {".txt", ".md"}
     
     def __init__(self, config_manager):
         self.config = config_manager
+
+    def _validate_output_path(self, output_file: str) -> Path:
+        """Valida que la salida apunte a un formato de texto seguro."""
+        output_path = Path(output_file)
+        if output_path.suffix.lower() not in self.ALLOWED_OUTPUT_EXTENSIONS:
+            raise ValueError("Solo se permite guardar salidas con extensión .txt o .md")
+        return output_path
     
     def create_output_content(self, analysis_result: Dict[str, Any]) -> str:
         """
@@ -72,22 +82,23 @@ class OutputFileManager:
             True si se guardó correctamente, False en caso contrario
         """
         try:
+            output_path = self._validate_output_path(output_file)
             content = self.create_output_content(analysis_result)
             
             # Asegurar que el directorio existe
-            output_dir = os.path.dirname(output_file)
+            output_dir = os.path.dirname(str(output_path))
             if output_dir and not os.path.exists(output_dir):
                 os.makedirs(output_dir)
             
             # Guardar archivo
-            with open(output_file, "w", encoding='utf-8') as f:
+            with open(output_path, "w", encoding='utf-8') as f:
                 f.write(content)
             
-            logging.info(f"Archivo guardado exitosamente: {output_file}")
+            logging.info(f"Archivo guardado exitosamente: {output_path.name}")
             return True
             
         except Exception as e:
-            logging.error(f"Error guardando archivo {output_file}: {e}")
+            logging.error(f"Error guardando archivo de salida: {e}")
             return False
     
     def save_intermediate_results(self, output_file: str, partial_summary: str, 
@@ -105,6 +116,7 @@ class OutputFileManager:
             True si se guardó correctamente, False en caso contrario
         """
         try:
+            output_path = self._validate_output_path(output_file)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             content = f"""# Transcripción de Audio - Audio2Text (En progreso)
@@ -128,7 +140,7 @@ class OutputFileManager:
 *Generado por Audio2Text (Procesamiento en curso)*
 """
             
-            with open(output_file, "w", encoding='utf-8') as f:
+            with open(output_path, "w", encoding='utf-8') as f:
                 f.write(content)
             
             return True
@@ -145,13 +157,21 @@ class OutputFileManager:
             output_file: Ruta del archivo a abrir
         """
         try:
-            if os.path.exists(output_file):
-                os.startfile(output_file)
-                logging.info(f"Archivo abierto: {output_file}")
+            output_path = Path(output_file)
+            if output_path.suffix.lower() not in self.ALLOWED_OUTPUT_EXTENSIONS:
+                logging.warning(
+                    "Autoapertura omitida para la extensión no permitida: %s",
+                    output_path.suffix or "<sin extensión>"
+                )
+                return
+
+            if output_path.exists():
+                os.startfile(str(output_path))
+                logging.info(f"Archivo abierto: {output_path.name}")
             else:
-                logging.warning(f"Archivo no encontrado: {output_file}")
+                logging.warning(f"Archivo no encontrado: {output_path.name}")
         except Exception as e:
-            logging.warning(f"No se pudo abrir automáticamente el archivo {output_file}: {e}")
+            logging.warning("No se pudo abrir automáticamente el archivo de salida: %s", e)
     
     def create_backup(self, original_file: str) -> Optional[str]:
         """

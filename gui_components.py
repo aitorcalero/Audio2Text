@@ -7,6 +7,7 @@ import os
 import sys
 import logging
 import threading
+from pathlib import Path
 from typing import Optional, Callable
 
 
@@ -233,6 +234,8 @@ class APIKeysDialog:
 
 class FileSelector:
     """Manejador para selección de archivos"""
+
+    ALLOWED_OUTPUT_EXTENSIONS = {".txt", ".md"}
     
     @staticmethod
     def select_audio_file() -> Optional[str]:
@@ -274,12 +277,24 @@ class FileSelector:
             initialfile=f"{default_name}.txt",
             filetypes=[
                 ("Archivos de texto", "*.txt"),
-                ("Archivos Markdown", "*.md"),
-                ("Todos los archivos", "*.*")
+                ("Archivos Markdown", "*.md")
             ]
         )
-        
-        return file_path if file_path else None
+
+        if not file_path:
+            return None
+
+        output_path = Path(file_path)
+        if not output_path.suffix:
+            output_path = output_path.with_suffix(".txt")
+        elif output_path.suffix.lower() not in FileSelector.ALLOWED_OUTPUT_EXTENSIONS:
+            messagebox.showerror(
+                "Extensión no permitida",
+                "Solo se permite guardar la transcripción como .txt o .md."
+            )
+            return None
+
+        return str(output_path)
 
 
 class ServiceSelectionDialog:

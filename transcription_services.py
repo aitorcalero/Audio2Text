@@ -2,13 +2,11 @@
 Servicios de transcripción para la aplicación Audio2Text
 Soporta OpenAI Whisper y ElevenLabs
 """
-import openai
 import logging
 import os
-from typing import Optional, Protocol
+from typing import Optional
 from abc import ABC, abstractmethod
 import requests
-import json
 import backoff
 import concurrent.futures
 
@@ -111,9 +109,7 @@ class ElevenLabsTranscriptionService(TranscriptionService):
                 
                 response = requests.post(url, headers=headers, files=files, data=data)
                 
-                # Log de debugging
-                logging.debug(f"Response status: {response.status_code}")
-                logging.debug(f"Response text: {response.text}")
+                logging.debug("ElevenLabs response status: %s", response.status_code)
                 
                 response.raise_for_status()
             
@@ -126,7 +122,7 @@ class ElevenLabsTranscriptionService(TranscriptionService):
         except requests.exceptions.RequestException as e:
             logging.error(f"Error de conexión con ElevenLabs: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logging.error(f"Response content: {e.response.text}")
+                logging.error("ElevenLabs devolvió HTTP %s", e.response.status_code)
             return None
         except Exception as e:
             logging.error(f"Error transcribiendo {audio_file_path} con ElevenLabs: {e}")
