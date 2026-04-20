@@ -24,7 +24,6 @@ Archivos principales del proyecto:
 
 - `config.json`
 - `config-*.json`
-- archivos `*-ESRI-*`
 - `.venv/`, `build/`, `dist/`, `__pycache__/`
 - audios, transcripciones, logs y binarios locales como `ffmpeg.exe`
 
