@@ -2,19 +2,27 @@
 
 Aplicacion de escritorio y linea de comandos para transcribir audio con OpenAI Whisper o ElevenLabs, con generacion opcional de resumenes y empaquetado para Windows.
 
-## Que Incluye
+## Estado Actual
 
-- Interfaz grafica para elegir servicio, archivo de entrada y destino de salida.
-- Modo CLI para automatizar transcripciones.
-- Division automatica de audios grandes y normalizacion previa.
-- Configuracion segura fuera del directorio del bundle en ejecutables Windows.
-- Script y spec de PyInstaller para generar `dist\Audio2Text\Audio2Text.exe`.
+- `main.py` es el punto de entrada principal.
+- `audio2text_refactored.py` se conserva solo como wrapper de compatibilidad.
+- La aplicacion puede pedir las API keys en el primer arranque si no encuentra configuracion.
+- La configuracion y los logs se guardan en una ruta segura para el ejecutable Windows.
+
+## Funcionalidades
+
+- Seleccion de servicio de transcripcion: OpenAI Whisper o ElevenLabs.
+- Interfaz grafica para elegir el audio y el archivo de salida.
+- Modo CLI para automatizar ejecuciones.
+- Normalizacion de audio y division automatica de archivos grandes.
+- Resumenes opcionales con OpenAI.
+- Empaquetado con PyInstaller.
 
 ## Requisitos
 
 - Python 3.10 o superior recomendado.
-- `ffmpeg` disponible en `PATH` o `ffmpeg.exe` junto al ejecutable/proyecto.
-- API key de OpenAI para Whisper y resumenes.
+- `ffmpeg` en `PATH` o `ffmpeg.exe` junto al proyecto o al ejecutable.
+- API key de OpenAI para Whisper y para los resumenes.
 - API key de ElevenLabs si quieres usar ese servicio.
 
 ## Instalacion
@@ -28,42 +36,82 @@ python -m venv .venv
 ```bash
 # Windows
 .venv\Scripts\activate
-
 pip install -r requirements.txt
+```
+
+## Configuracion
+
+Tienes dos formas de configurar la aplicacion:
+
+1. Primer arranque guiado.
+   Si no hay claves configuradas, la interfaz muestra un dialogo para introducirlas y las guarda automaticamente.
+
+2. Archivo manual.
+
+```bash
 copy config.example.json config.json
 ```
 
-Edita `config.json` con tus claves reales. El repositorio ignora `config.json` para no subir secretos.
+Despues edita `config.json` con tus claves reales.
+
+### Orden de carga de configuracion
+
+El proyecto busca `config.json` en este orden:
+
+1. Ruta indicada en la variable de entorno `AUDIO2TEXT_CONFIG`.
+2. Directorio actual o junto al ejecutable.
+3. Directorio del bundle de PyInstaller.
+4. `%LOCALAPPDATA%\Audio2Text\config.json`.
+
+En Windows, cuando la aplicacion guarda configuracion nueva, lo hace en `%LOCALAPPDATA%\Audio2Text\config.json`.
+
+### Parametros principales
+
+- `TRANSCRIPTION_SERVICE`: `openai` o `elevenlabs`.
+- `FILE_SIZE_LIMIT_MB`: umbral para dividir audios grandes.
+- `CHUNK_DURATION_MIN`: duracion de cada segmento.
+- `WHISPER_MODEL`: modelo de Whisper para OpenAI.
+- `OPENAI_ENGINE`: modelo usado para generar resumenes.
+- `IDIOMA_FORZADO`: vacio para deteccion automatica o codigo como `es`/`en`.
 
 ## Uso
 
-Modo grafico:
+### Modo grafico
 
 ```bash
 python main.py
 ```
 
-Modo linea de comandos:
+### Modo linea de comandos
 
 ```bash
 python main.py input.mp3 output.txt
 python main.py input.wav output.txt es
 ```
 
-`audio2text_refactored.py` se conserva como wrapper de compatibilidad y delega en `main.py`.
+El tercer argumento es opcional y permite forzar el idioma.
 
-## Configuracion
+## Logs
 
-`config.example.json` incluye los parametros principales:
+En Windows, el log de la aplicacion se escribe en:
 
-- `TRANSCRIPTION_SERVICE`: `openai` o `elevenlabs`
-- `FILE_SIZE_LIMIT_MB`: umbral para partir audios
-- `CHUNK_DURATION_MIN`: duracion de cada segmento
-- `WHISPER_MODEL`: modelo de transcripcion de OpenAI
-- `OPENAI_ENGINE`: modelo usado para resumenes
-- `IDIOMA_FORZADO`: vacio para deteccion automatica
+```text
+%LOCALAPPDATA%\Audio2Text\logs\audio2text.log
+```
 
-## Estructura
+## Build Windows
+
+```bash
+build_exe.bat
+```
+
+Salida esperada:
+
+```text
+dist\Audio2Text\Audio2Text.exe
+```
+
+## Estructura Principal
 
 ```text
 Audio2Text/
@@ -82,18 +130,6 @@ Audio2Text/
 `- build_exe.bat
 ```
 
-## Build Windows
-
-```bash
-build_exe.bat
-```
-
-Resultado esperado:
-
-```text
-dist\Audio2Text\Audio2Text.exe
-```
-
 ## GitHub
 
-Las notas rapidas para preparar y subir el repo estan en `GITHUB_SETUP.md` y `CONECTAR_GITHUB.md`.
+Las notas rapidas para preparar y subir el repo siguen en `GITHUB_SETUP.md` y `CONECTAR_GITHUB.md`.
