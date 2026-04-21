@@ -3,6 +3,7 @@ Gestor de archivos de salida para la aplicación Audio2Text
 """
 import os
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -12,6 +13,13 @@ class OutputFileManager:
     """Maneja la creación y guardado de archivos de salida"""
 
     ALLOWED_OUTPUT_EXTENSIONS = {".txt", ".md"}
+    SUMMARY_LABELS = (
+        "resumen",
+        "summary",
+        "résumé",
+        "zusammenfassung",
+        "riassunto",
+    )
     
     def __init__(self, config_manager):
         self.config = config_manager
@@ -37,6 +45,10 @@ class OutputFileManager:
         language = analysis_result.get('language', 'desconocido')
         final_summary = analysis_result.get('final_summary', '')
         original_transcript = analysis_result.get('original_transcript', '')
+        transcription_metadata = analysis_result.get("transcription_metadata", {})
+        metadata_section = self._format_transcription_metadata(transcription_metadata)
+        cleaned_summary = self._clean_summary_text(final_summary, original_transcript)
+        cleaned_transcript = self._normalize_block_text(original_transcript)
         
         # Crear encabezado
         header = f"""# Transcripción de Audio - Audio2Text
@@ -44,6 +56,7 @@ class OutputFileManager:
 **Idioma detectado:** {language}
 **Partes procesadas:** {analysis_result.get('text_parts_count', 0)}
 **Resúmenes generados:** {analysis_result.get('summaries_count', 0)}
+{metadata_section}
 
 ---
 
@@ -52,23 +65,89 @@ class OutputFileManager:
         # Sección de resumen
         summary_section = f"""## Resumen
 
-{final_summary}
+{cleaned_summary}
 
----
+## Transcripción Original
 
-"""
-        
-        # Sección de transcripción completa
-        transcript_section = f"""## Transcripción Original
-
-{original_transcript}
+~~~text
+{cleaned_transcript}
+~~~
 
 ---
 
 *Generado por Audio2Text*
 """
-        
-        return header + summary_section + transcript_section
+
+        return header + summary_section
+
+    def _format_transcription_metadata(self, metadata: Dict[str, Any]) -> str:
+        """Formatea información del backend de transcripción usado."""
+        if not metadata:
+            return "**Servicio de transcripción:** Desconocido"
+
+        lines = [
+            f"**Servicio de transcripción:** {metadata.get('service_name', 'Desconocido')}",
+            f"**Proveedor / motor:** {metadata.get('provider', 'Desconocido')}",
+            f"**Modelo usado:** {metadata.get('model_identifier', metadata.get('model', 'Desconocido'))}",
+            f"**Tipo de ejecución:** {metadata.get('execution_target', 'Desconocido')}",
+        ]
+
+        effective_device = metadata.get("effective_device")
+        requested_device = metadata.get("requested_device")
+        compute_type = metadata.get("compute_type")
+
+        if requested_device:
+            lines.append(f"**Dispositivo solicitado:** {requested_device}")
+        if effective_device and effective_device != "online":
+            lines.append(f"**Dispositivo efectivo:** {effective_device}")
+        if compute_type:
+            lines.append(f"**Precisión / compute type:** {compute_type}")
+
+        return "\n".join(lines)
+
+    def _normalize_block_text(self, text: str) -> str:
+        """Normaliza el texto para su salida manteniendo su contenido."""
+        cleaned = (text or "").replace("\r\n", "\n").strip()
+        return cleaned or "(sin contenido)"
+
+    def _build_transcript_probe(self, transcript: str, words: int = 14) -> str:
+        """Extrae una frase inicial de la transcripción para detectar arrastre."""
+        normalized = re.sub(r"\s+", " ", (transcript or "")).strip()
+        if not normalized:
+            return ""
+        parts = normalized.split(" ")
+        probe = " ".join(parts[:words]).strip()
+        return probe if len(probe) >= 24 else normalized[:48]
+
+    def _clean_summary_text(self, summary: str, transcript: str) -> str:
+        """Limpia el resumen y corta texto de transcripción añadido por error."""
+        cleaned = self._normalize_block_text(summary)
+        cleaned = re.sub(r"^```[\w-]*\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = re.sub(
+            rf"^\s*#+\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+
+        transcript_probe = self._build_transcript_probe(transcript)
+        if transcript_probe:
+            pattern = r"\b" + r"\s+".join(
+                re.escape(word) for word in transcript_probe.split()
+            ) + r"\b"
+            match = re.search(pattern, cleaned, flags=re.IGNORECASE)
+            if match and match.start() > 20:
+                cleaned = cleaned[:match.start()].rstrip(" \n:-")
+
+        cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+        return cleaned or "No se pudo generar resumen."
     
     def save_transcription(self, output_file: str, analysis_result: Dict[str, Any]) -> bool:
         """
@@ -127,13 +206,13 @@ class OutputFileManager:
 
 ## Resumen (Parcial)
 
-{partial_summary}
-
----
+{self._clean_summary_text(partial_summary, full_transcript)}
 
 ## Transcripción Original
 
-{full_transcript}
+~~~text
+{self._normalize_block_text(full_transcript)}
+~~~
 
 ---
 

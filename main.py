@@ -58,12 +58,26 @@ class Audio2TextProcessor:
             self.config_manager = ConfigManager(config_file)
             logging.info("Configuración cargada exitosamente")
             
-            # Verificar si faltan las claves API (Primer uso)
+            # Verificar credenciales solo si el servicio configurado las necesita
+            selected_service = self.config_manager.get(
+                "TRANSCRIPTION_SERVICE",
+                "local",
+            )
             openai_key = self.config_manager.get("OPENAI_API_KEY", "")
             eleven_key = self.config_manager.get("ELEVENLABS_API_KEY", "")
-            
-            if not openai_key and not eleven_key:
-                logging.info("Claves API no encontradas. Solicitando al usuario...")
+
+            requires_api_key = (
+                selected_service == "openai" and not openai_key
+            ) or (
+                selected_service == "elevenlabs" and not eleven_key
+            )
+
+            if requires_api_key:
+                logging.info(
+                    "Falta la API key del servicio configurado (%s). "
+                    "Solicitando al usuario...",
+                    selected_service,
+                )
                 dialog = APIKeysDialog()
                 keys = dialog.show()
                 if keys:
@@ -134,6 +148,7 @@ class Audio2TextProcessor:
                 audio_segments, 
                 transcription_language
             )
+            transcription_metadata = self.transcription_manager.get_last_run_metadata()
             logging.info("Transcripción completada")
             
             # Paso 3: Analizar texto y generar resúmenes
@@ -144,6 +159,7 @@ class Audio2TextProcessor:
                 full_transcript, 
                 forced_language
             )
+            analysis_result["transcription_metadata"] = transcription_metadata
             logging.info("Análisis de texto completado")
             
             # Paso 4: Guardar resultados
@@ -226,7 +242,15 @@ class Audio2TextProcessor:
                 
                 def worker():
                     try:
-                        service_name = "OpenAI Whisper" if selected_service == "openai" else "ElevenLabs"
+                        service_labels = {
+                            "openai": "OpenAI Whisper",
+                            "elevenlabs": "ElevenLabs",
+                            "local": "Modelo local Faster-Whisper",
+                        }
+                        service_name = service_labels.get(
+                            selected_service,
+                            selected_service,
+                        )
                         update_progress(f"Usando {service_name} para transcripción...")
                         
                         start_time = time.time()

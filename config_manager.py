@@ -59,7 +59,8 @@ class ConfigManager:
         default_config: Dict[str, Any] = {
             "OPENAI_API_KEY": "",
             "ELEVENLABS_API_KEY": "",
-            "TRANSCRIPTION_SERVICE": "openai",
+            "TRANSCRIPTION_SERVICE": "local",
+            "LOCAL_WHISPER_MODEL": "base",
             "FILE_SIZE_LIMIT_MB": 24,
             "CHUNK_DURATION_MIN": 10,
             "TEXT_WRAP_LIMIT": 3000,

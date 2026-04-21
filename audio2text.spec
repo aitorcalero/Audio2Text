@@ -2,19 +2,33 @@
 import os
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_dynamic_libs,
+    collect_submodules,
+)
 
 block_cipher = None
 
 # Usar cwd porque __file__ no está definido al ejecutar el spec
 here = Path.cwd()
 
-# Datos adicionales: perfiles de langdetect y la plantilla de config
+# Datos adicionales: perfiles de langdetect, assets de customtkinter
+# y la plantilla de config
 datas = collect_data_files("langdetect")
+datas += collect_data_files("customtkinter")
+datas += collect_data_files("faster_whisper")
 datas.append((str(here / "config.example.json"), "."))
 
 # Binarios adicionales: ffmpeg solo si se solicita explícitamente
-binaries = []
+binaries = collect_dynamic_libs("ctranslate2")
+binaries += collect_dynamic_libs("av")
+
+hiddenimports = ["langdetect.lang_detect_exception"]
+hiddenimports += collect_submodules("faster_whisper")
+hiddenimports += collect_submodules("ctranslate2")
+hiddenimports += collect_submodules("av")
+
 bundle_ffmpeg = os.environ.get("AUDIO2TEXT_BUNDLE_FFMPEG", "").lower() in {"1", "true", "yes", "on"}
 ffmpeg_override = os.environ.get("AUDIO2TEXT_FFMPEG_PATH")
 
@@ -31,7 +45,7 @@ a = Analysis(
     pathex=[str(here)],
     binaries=binaries,
     datas=datas,
-    hiddenimports=["langdetect.lang_detect_exception"],
+    hiddenimports=hiddenimports,
     hookspath=[],
     runtime_hooks=[],
     excludes=[],

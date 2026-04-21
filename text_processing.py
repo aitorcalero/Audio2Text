@@ -1,7 +1,6 @@
 """
 Servicios de procesamiento de texto y resumen
 """
-import openai
 import logging
 import re
 import textwrap
@@ -105,6 +104,13 @@ class SummaryService:
         "babbage",
         "ada",
     )
+    SUMMARY_LABELS = (
+        "resumen",
+        "summary",
+        "résumé",
+        "zusammenfassung",
+        "riassunto",
+    )
     
     def __init__(self, config_manager):
         self.config = config_manager
@@ -113,22 +119,113 @@ class SummaryService:
         
         api_key = config_manager.get("OPENAI_API_KEY")
         if api_key:
-            from openai import OpenAI
-            self.client = OpenAI(api_key=api_key)
-            self.enabled = True
+            try:
+                from openai import OpenAI
+
+                self.client = OpenAI(api_key=api_key)
+                self.enabled = True
+            except Exception as exc:
+                logging.warning(
+                    "No se pudo inicializar el cliente de OpenAI para resúmenes: %s. "
+                    "Se omite la generación de resúmenes.",
+                    exc,
+                )
+                self.client = None
+                self.enabled = False
         else:
             logging.warning("OPENAI_API_KEY no configurada. Se omite la generación de resúmenes.")
     
-    def _get_prompt_template(self, language: str) -> str:
-        """Obtiene la plantilla de prompt según el idioma"""
-        templates = {
-            'es': "Resumen:\n\n{text}\n\nResumen:",
-            'en': "Summary:\n\n{text}\n\nSummary:",
-            'fr': "Résumé:\n\n{text}\n\nRésumé:",
-            'de': "Zusammenfassung:\n\n{text}\n\nZusammenfassung:",
-            'it': "Riassunto:\n\n{text}\n\nRiassunto:"
+    def _get_summary_language_name(self, language: str) -> str:
+        """Devuelve el nombre legible del idioma objetivo."""
+        language_names = {
+            "es": "Spanish",
+            "en": "English",
+            "fr": "French",
+            "de": "German",
+            "it": "Italian",
         }
-        return templates.get(language, templates['es'])
+        return language_names.get(language, "Spanish")
+
+    def _build_summary_messages(self, text: str, language: str) -> list[dict[str, str]]:
+        """Construye mensajes robustos para evitar que el modelo repita la transcripción."""
+        target_language = self._get_summary_language_name(language)
+        system_prompt = (
+            "You summarize speech transcriptions. "
+            f"Write the answer in {target_language}. "
+            "Return only the final summary, without titles, labels, bullet prefixes, "
+            "or introductory phrases. "
+            "Do not copy long verbatim fragments from the source text. "
+            "Do not append the original transcript. "
+            "If the transcription is messy, infer the main points and present them clearly."
+        )
+        user_prompt = (
+            "Summarize the following transcription in 1 to 3 concise paragraphs.\n\n"
+            "Transcript:\n"
+            f"{text}"
+        )
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def _build_completion_prompt(self, text: str, language: str) -> str:
+        """Construye un prompt robusto para modelos de completions."""
+        target_language = self._get_summary_language_name(language)
+        return (
+            "You summarize speech transcriptions.\n"
+            f"Write the answer in {target_language}.\n"
+            "Return only the final summary, without titles, labels, bullet prefixes, "
+            "or introductory phrases.\n"
+            "Do not copy long verbatim fragments from the source text.\n"
+            "Do not append the original transcript.\n\n"
+            "Transcript:\n"
+            f"{text}\n\n"
+            "Final summary:"
+        )
+
+    def _remove_summary_label(self, summary: str) -> str:
+        """Elimina encabezados o etiquetas redundantes al inicio del resumen."""
+        cleaned = (summary or "").strip()
+        cleaned = re.sub(r"^```[\w-]*\s*", "", cleaned)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = re.sub(
+            rf"^\s*#+\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        return cleaned.strip()
+
+    @staticmethod
+    def _build_transcript_probe(text: str, words: int = 14) -> str:
+        """Extrae una frase inicial del texto para detectar eco de transcripción."""
+        normalized = re.sub(r"\s+", " ", (text or "")).strip()
+        if not normalized:
+            return ""
+        parts = normalized.split(" ")
+        probe = " ".join(parts[:words]).strip()
+        return probe if len(probe) >= 24 else normalized[:48]
+
+    def _strip_transcript_echo(self, summary: str, source_text: str) -> str:
+        """Recorta una transcripción pegada al final del resumen."""
+        cleaned = self._remove_summary_label(summary)
+        transcript_probe = self._build_transcript_probe(source_text)
+        if not transcript_probe:
+            return cleaned
+
+        probe_words = transcript_probe.split()
+        pattern = r"\b" + r"\s+".join(re.escape(word) for word in probe_words) + r"\b"
+        match = re.search(pattern, cleaned, flags=re.IGNORECASE)
+        if match and match.start() > 20:
+            cleaned = cleaned[:match.start()].rstrip(" \n:-")
+
+        return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     def _should_use_chat_completions(self, engine: str) -> bool:
         """Decide el endpoint correcto según el nombre del modelo configurado."""
@@ -164,15 +261,13 @@ class SummaryService:
     def _create_chat_summary(
         self,
         engine: str,
-        prompt: str,
+        messages: list[dict[str, str]],
         max_tokens: int,
         temperature: float,
     ) -> str:
         response = self.client.chat.completions.create(
             model=engine,
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
+            messages=messages,
             max_tokens=max_tokens,
             temperature=temperature
         )
@@ -209,8 +304,8 @@ class SummaryService:
             if not self.enabled or not self.client:
                 return "Resumen no generado (falta OPENAI_API_KEY)"
             
-            prompt_template = self._get_prompt_template(language)
-            prompt = prompt_template.format(text=text)
+            messages = self._build_summary_messages(text, language)
+            prompt = self._build_completion_prompt(text, language)
             
             # Configuración del modelo
             engine = self.config.get('OPENAI_ENGINE', 'gpt-4o-mini')
@@ -226,7 +321,7 @@ class SummaryService:
                 if use_chat_endpoint:
                     summary = self._create_chat_summary(
                         engine,
-                        prompt,
+                        messages,
                         max_tokens,
                         temperature,
                     )
@@ -256,13 +351,14 @@ class SummaryService:
                     )
                     summary = self._create_chat_summary(
                         engine,
-                        prompt,
+                        messages,
                         max_tokens,
                         temperature,
                     )
                 else:
                     raise
             
+            summary = self._strip_transcript_echo(summary, text)
             logging.info(f"Resumen generado: {len(summary)} caracteres")
             return summary
             

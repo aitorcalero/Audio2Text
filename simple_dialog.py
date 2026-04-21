@@ -6,7 +6,7 @@ from tkinter import ttk
 from typing import Optional
 
 
-def select_service(current_service: str = "openai") -> Optional[str]:
+def select_service(current_service: str = "local") -> Optional[str]:
     """
     Función simple para seleccionar el servicio de transcripción
     Basada en el diálogo de prueba que funciona correctamente
@@ -18,13 +18,13 @@ def select_service(current_service: str = "openai") -> Optional[str]:
     # Crear ventana principal
     root = tk.Tk()
     root.title("Seleccionar Servicio de Transcripción")
-    root.geometry("400x300")
+    root.geometry("520x360")
     root.resizable(False, False)
     
     # Centrar ventana
     root.update_idletasks()
-    width = 400
-    height = 300
+    width = 520
+    height = 360
     x = (root.winfo_screenwidth() // 2) - (width // 2)
     y = (root.winfo_screenheight() // 2) - (height // 2)
     root.geometry(f"{width}x{height}+{x}+{y}")
@@ -47,7 +47,12 @@ def select_service(current_service: str = "openai") -> Optional[str]:
     # Opciones de servicio
     services = [
         ("openai", "OpenAI Whisper\n(Requiere API key de OpenAI)"),
-        ("elevenlabs", "ElevenLabs Speech-to-Text\n(Requiere API key de ElevenLabs)")
+        ("elevenlabs", "ElevenLabs Speech-to-Text\n(Requiere API key de ElevenLabs)"),
+        (
+            "local",
+            "Modelo Local (Faster-Whisper)\n"
+            "(Sin API key, descarga el modelo en el primer uso y consume CPU/RAM)",
+        ),
     ]
     
     for service_id, description in services:
@@ -108,5 +113,5 @@ def select_service(current_service: str = "openai") -> Optional[str]:
 
 if __name__ == "__main__":
     # Prueba del diálogo
-    service = select_service("openai")
+    service = select_service("local")
     print(f"Resultado final: {service}")
