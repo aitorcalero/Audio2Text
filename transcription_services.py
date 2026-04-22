@@ -5,6 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 import logging
 import os
+import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
 import threading
@@ -17,8 +18,23 @@ _WINDOWS_DLL_HANDLES: list[Any] = []
 _WINDOWS_DLL_LOCK = threading.Lock()
 
 
+def _get_base_path() -> Path:
+    """Devuelve la ruta base del bundle o del proyecto actual."""
+    if getattr(sys, "_MEIPASS", None):
+        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parent
+
+
 def _get_models_dir() -> Path:
     """Devuelve el directorio seguro donde se almacenan modelos locales."""
+    env_models_dir = os.environ.get("AUDIO2TEXT_MODELS_DIR")
+    if env_models_dir:
+        return Path(env_models_dir).expanduser()
+
+    portable_models_dir = _get_base_path() / "models"
+    if portable_models_dir.exists():
+        return portable_models_dir
+
     local_appdata = os.environ.get("LOCALAPPDATA")
     if local_appdata:
         return Path(local_appdata) / "Audio2Text" / "models"

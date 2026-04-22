@@ -150,24 +150,37 @@ class ConfigManager:
         """
         if new_config:
             self.config.update(new_config)
-            
+
+        candidate_paths: List[Path] = []
+        env_config = os.environ.get("AUDIO2TEXT_CONFIG")
+        if env_config:
+            candidate_paths.append(Path(env_config).expanduser())
+
         local_appdata = os.environ.get("LOCALAPPDATA")
         if local_appdata:
-            save_dir = Path(local_appdata) / "Audio2Text"
-            save_dir.mkdir(parents=True, exist_ok=True)
-            save_path = save_dir / self.config_file
+            candidate_paths.append(Path(local_appdata) / "Audio2Text" / self.config_file)
         else:
-            save_path = Path.home() / ".audio2text" / self.config_file
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            
-        try:
-            with open(save_path, "w", encoding="utf-8") as f:
-                json.dump(self.config, f, indent=4, ensure_ascii=False)
-            logging.info(f"Configuración guardada en: {save_path.name}")
-            return True
-        except Exception as e:
-            logging.error(f"No se pudo guardar la configuración en {save_path.name}: {e}")
-            return False
+            candidate_paths.append(Path.home() / ".audio2text" / self.config_file)
+
+        last_error: Exception | None = None
+        for save_path in candidate_paths:
+            try:
+                save_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(save_path, "w", encoding="utf-8") as f:
+                    json.dump(self.config, f, indent=4, ensure_ascii=False)
+                logging.info(f"Configuración guardada en: {save_path}")
+                return True
+            except Exception as e:
+                last_error = e
+                logging.error(
+                    "No se pudo guardar la configuración en %s: %s",
+                    save_path,
+                    e,
+                )
+
+        if last_error:
+            logging.error("No se pudo guardar la configuración en ninguna ubicación candidata")
+        return False
     
     def get(self, key: str, default=None):
         """Obtiene un valor de configuración"""
