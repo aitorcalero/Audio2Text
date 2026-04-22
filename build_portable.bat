@@ -71,7 +71,17 @@ copy /Y "%APP_ROOT%\output_manager.py" "%OUT_DIR%\" >nul || goto :build_error
 copy /Y "%APP_ROOT%\text_processing.py" "%OUT_DIR%\" >nul || goto :build_error
 copy /Y "%APP_ROOT%\transcription_services.py" "%OUT_DIR%\" >nul || goto :build_error
 copy /Y "%APP_ROOT%\simple_dialog.py" "%OUT_DIR%\" >nul || goto :build_error
-copy /Y "%APP_ROOT%\config.example.json" "%OUT_DIR%\config.json" >nul || goto :build_error
+
+if exist "%APP_ROOT%\config.json" (
+    echo.
+    echo Copiando config.json actual del proyecto...
+    copy /Y "%APP_ROOT%\config.json" "%OUT_DIR%\config.json" >nul || goto :build_error
+) else (
+    echo.
+    echo No existe config.json en la raiz del proyecto. Se copiara config.example.json...
+    copy /Y "%APP_ROOT%\config.example.json" "%OUT_DIR%\config.json" >nul || goto :build_error
+)
+
 copy /Y "%APP_ROOT%\portable_runtime_gui.bat" "%OUT_DIR%\Audio2Text.bat" >nul || goto :build_error
 copy /Y "%APP_ROOT%\portable_runtime_console.bat" "%OUT_DIR%\Audio2Text_Console.bat" >nul || goto :build_error
 

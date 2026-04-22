@@ -165,6 +165,7 @@ class Audio2TextProcessor:
                 full_transcript, 
                 forced_language
             )
+            analysis_result["transcription_elapsed_seconds"] = transcription_elapsed_seconds
             analysis_result["transcription_metadata"] = transcription_metadata
             logging.info("Análisis de texto completado")
             

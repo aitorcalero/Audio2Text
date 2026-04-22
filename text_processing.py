@@ -116,6 +116,7 @@ class SummaryService:
         self.config = config_manager
         self.client = None
         self.enabled = False
+        self.unavailable_reason = ""
         
         api_key = config_manager.get("OPENAI_API_KEY")
         if api_key:
@@ -132,8 +133,10 @@ class SummaryService:
                 )
                 self.client = None
                 self.enabled = False
+                self.unavailable_reason = "cliente OpenAI no disponible"
         else:
             logging.warning("OPENAI_API_KEY no configurada. Se omite la generación de resúmenes.")
+            self.unavailable_reason = "falta OPENAI_API_KEY"
     
     def _get_summary_language_name(self, language: str) -> str:
         """Devuelve el nombre legible del idioma objetivo."""
@@ -195,12 +198,28 @@ class SummaryService:
             flags=re.IGNORECASE,
         )
         cleaned = re.sub(
-            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:\s*",
             "",
             cleaned,
             flags=re.IGNORECASE,
         )
         return cleaned.strip()
+
+    def get_unavailable_summary(self) -> str:
+        """Devuelve un mensaje consistente cuando no se puede resumir."""
+        if self.unavailable_reason:
+            return f"Resumen no generado ({self.unavailable_reason})"
+        return "Resumen no generado"
+
+    @staticmethod
+    def is_placeholder_summary(summary: str) -> bool:
+        """Indica si el texto no es un resumen real sino un placeholder o error."""
+        normalized = (summary or "").strip().lower()
+        return (
+            normalized.startswith("resumen no generado")
+            or normalized.startswith("error generando resumen")
+            or normalized.startswith("no se pudo generar resumen")
+        )
 
     @staticmethod
     def _build_transcript_probe(text: str, words: int = 14) -> str:
@@ -302,7 +321,7 @@ class SummaryService:
         """
         try:
             if not self.enabled or not self.client:
-                return "Resumen no generado (falta OPENAI_API_KEY)"
+                return self.get_unavailable_summary()
             
             messages = self._build_summary_messages(text, language)
             prompt = self._build_completion_prompt(text, language)
@@ -377,6 +396,9 @@ class SummaryService:
         Returns:
             Lista de resúmenes
         """
+        if not self.enabled or not self.client:
+            return []
+
         summaries = []
         
         for i, part in enumerate(text_parts, 1):
@@ -399,6 +421,19 @@ class TextAnalysisManager:
         self.language_detector = LanguageDetector(config_manager)
         self.text_processor = TextProcessor(config_manager)
         self.summary_service = SummaryService(config_manager)
+
+    @staticmethod
+    def _deduplicate_preserving_order(items: List[str]) -> List[str]:
+        """Elimina duplicados preservando el orden original."""
+        seen = set()
+        result = []
+        for item in items:
+            normalized = (item or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            result.append(normalized)
+        return result
     
     def process_transcript(self, transcript: str, forced_language: Optional[str] = None) -> dict:
         """
@@ -418,15 +453,36 @@ class TextAnalysisManager:
         text_parts = self.text_processor.split_text_for_processing(transcript)
         
         # Generar resúmenes
-        summaries = self.summary_service.summarize_text_parts(text_parts, language)
-        
-        # Combinar resúmenes
-        final_summary = "\n".join(summaries) if summaries else "No se pudo generar resumen"
+        if self.summary_service.enabled and self.summary_service.client:
+            summaries = self.summary_service.summarize_text_parts(text_parts, language)
+        else:
+            summaries = []
+
+        real_summaries = [
+            summary.strip()
+            for summary in summaries
+            if summary and not self.summary_service.is_placeholder_summary(summary)
+        ]
+        real_summaries = self._deduplicate_preserving_order(real_summaries)
+
+        if real_summaries:
+            final_summary = "\n\n".join(real_summaries)
+            summaries_count = len(real_summaries)
+        elif summaries:
+            placeholder_summaries = self._deduplicate_preserving_order(summaries)
+            final_summary = placeholder_summaries[0]
+            summaries_count = 0
+        elif not self.summary_service.enabled or not self.summary_service.client:
+            final_summary = self.summary_service.get_unavailable_summary()
+            summaries_count = 0
+        else:
+            final_summary = "No se pudo generar resumen"
+            summaries_count = 0
         
         return {
             'language': language,
             'text_parts_count': len(text_parts),
-            'summaries_count': len(summaries),
+            'summaries_count': summaries_count,
             'final_summary': final_summary,
             'original_transcript': transcript
         }

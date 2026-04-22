@@ -45,7 +45,13 @@ class OutputFileManager:
         language = analysis_result.get('language', 'desconocido')
         final_summary = analysis_result.get('final_summary', '')
         original_transcript = analysis_result.get('original_transcript', '')
-        transcription_metadata = analysis_result.get("transcription_metadata", {})
+        transcription_metadata = dict(analysis_result.get("transcription_metadata", {}))
+        fallback_elapsed_seconds = analysis_result.get("transcription_elapsed_seconds")
+        if (
+            "elapsed_seconds" not in transcription_metadata
+            and isinstance(fallback_elapsed_seconds, (int, float))
+        ):
+            transcription_metadata["elapsed_seconds"] = float(fallback_elapsed_seconds)
         metadata_section = self._format_transcription_metadata(transcription_metadata)
         cleaned_summary = self._clean_summary_text(final_summary, original_transcript)
         cleaned_transcript = self._normalize_block_text(original_transcript)
@@ -149,7 +155,7 @@ class OutputFileManager:
             flags=re.IGNORECASE,
         )
         cleaned = re.sub(
-            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:?\s*",
+            rf"^\s*(?:{'|'.join(self.SUMMARY_LABELS)})\s*:\s*",
             "",
             cleaned,
             flags=re.IGNORECASE,
@@ -164,8 +170,32 @@ class OutputFileManager:
             if match and match.start() > 20:
                 cleaned = cleaned[:match.start()].rstrip(" \n:-")
 
+        cleaned = self._collapse_duplicate_placeholder_lines(cleaned)
         cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
         return cleaned or "No se pudo generar resumen."
+
+    @staticmethod
+    def _collapse_duplicate_placeholder_lines(text: str) -> str:
+        """Reduce placeholders repetidos a una sola línea."""
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(lines) <= 1:
+            return text
+
+        first_line = lines[0].lower()
+        placeholder_prefixes = (
+            "resumen no generado",
+            "error generando resumen",
+            "no se pudo generar resumen",
+            "cliente openai no disponible",
+            "falta openai_api_key",
+            "no generado (falta openai_api_key)",
+        )
+        if all(line.lower() == first_line for line in lines) and any(
+            first_line.startswith(prefix) for prefix in placeholder_prefixes
+        ):
+            return lines[0]
+
+        return text
     
     def save_transcription(self, output_file: str, analysis_result: Dict[str, Any]) -> bool:
         """

@@ -77,7 +77,7 @@ class ConfigManager:
                     if not self._is_supported_config_path(path):
                         continue
                     data = self._load_json_config(path)
-                    logging.info(f"Configuración cargada desde: {path.name}")
+                    logging.info("Configuración cargada desde: %s", path)
                     default_config.update(data or {})
                     return default_config
             except json.JSONDecodeError as e:
