@@ -50,7 +50,7 @@ def select_service(current_service: str = "local") -> Optional[str]:
         ("elevenlabs", "ElevenLabs Speech-to-Text\n(Requiere API key de ElevenLabs)"),
         (
             "local",
-            "Modelo Local (Faster-Whisper)\n"
+            "Modelo Local (Whisper)\n"
             "(Sin API key, descarga el modelo en el primer uso y consume CPU/RAM)",
         ),
     ]

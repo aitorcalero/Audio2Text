@@ -95,6 +95,7 @@ class OutputFileManager:
         effective_device = metadata.get("effective_device")
         requested_device = metadata.get("requested_device")
         compute_type = metadata.get("compute_type")
+        elapsed_seconds = metadata.get("elapsed_seconds")
 
         if requested_device:
             lines.append(f"**Dispositivo solicitado:** {requested_device}")
@@ -102,8 +103,25 @@ class OutputFileManager:
             lines.append(f"**Dispositivo efectivo:** {effective_device}")
         if compute_type:
             lines.append(f"**Precisión / compute type:** {compute_type}")
+        if isinstance(elapsed_seconds, (int, float)) and elapsed_seconds >= 0:
+            lines.append(
+                f"**Tiempo de transcripción:** {self._format_elapsed_time(float(elapsed_seconds))}"
+            )
 
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_elapsed_time(elapsed_seconds: float) -> str:
+        """Convierte segundos a un formato legible para el documento final."""
+        total_seconds = max(0.0, elapsed_seconds)
+        minutes, seconds = divmod(total_seconds, 60)
+        hours, minutes = divmod(int(minutes), 60)
+
+        if hours:
+            return f"{hours}h {minutes:02d}m {seconds:04.1f}s"
+        if minutes:
+            return f"{int(minutes)}m {seconds:04.1f}s"
+        return f"{seconds:.1f}s"
 
     def _normalize_block_text(self, text: str) -> str:
         """Normaliza el texto para su salida manteniendo su contenido."""

@@ -72,7 +72,8 @@ class AudioProcessor:
 
                 # Parchea tanto subprocess como la copia que usa pydub
                 subprocess.Popen = quiet_popen
-                pydub_utils.subprocess.Popen = quiet_popen
+                if hasattr(pydub_utils, "subprocess"):
+                    pydub_utils.subprocess.Popen = quiet_popen
                 logging.info("Subproceso de ffmpeg configurado para no mostrar ventana en Windows")
         except Exception as e:
             logging.warning(f"No se pudo suprimir la ventana de ffmpeg: {e}")

@@ -287,9 +287,9 @@ class LocalWhisperTranscriptionService(TranscriptionService):
 
     _PUNCTUATION_PREFIXES = tuple(",.;:!?)]}%")
 
-    def __init__(self, model_size: str = "base", device: str = "auto"):
+    def __init__(self, model_size: str = "large-v3", device: str = "auto"):
         super().__init__()
-        self.model_size = (model_size or "base").strip()
+        self.model_size = (model_size or "large-v3").strip()
         self.requested_device = (device or "auto").strip().lower()
         self.device = self.requested_device
         self.models_dir = _get_models_dir()
@@ -549,7 +549,7 @@ class TranscriptionServiceFactory:
             return ElevenLabsTranscriptionService(api_key)
 
         if normalized_type == "local":
-            model_size = config_manager.get("LOCAL_WHISPER_MODEL", "base")
+            model_size = config_manager.get("LOCAL_WHISPER_MODEL", "large-v3")
             return LocalWhisperTranscriptionService(model_size=model_size, device="auto")
 
         raise ValueError(f"Tipo de servicio no soportado: {service_type}")

@@ -57,6 +57,7 @@ class Audio2TextProcessor:
             # Cargar configuración
             self.config_manager = ConfigManager(config_file)
             logging.info("Configuración cargada exitosamente")
+            self.gui_manager = GUIManager(self.config_manager)
             
             # Verificar credenciales solo si el servicio configurado las necesita
             selected_service = self.config_manager.get(
@@ -78,7 +79,7 @@ class Audio2TextProcessor:
                     "Solicitando al usuario...",
                     selected_service,
                 )
-                dialog = APIKeysDialog()
+                dialog = APIKeysDialog(self.gui_manager.get_root())
                 keys = dialog.show()
                 if keys:
                     self.config_manager.save_config(keys)
@@ -91,7 +92,6 @@ class Audio2TextProcessor:
             self.transcription_manager = TranscriptionManager(self.config_manager)
             self.text_analysis_manager = TextAnalysisManager(self.config_manager)
             self.output_manager = OutputFileManager(self.config_manager)
-            self.gui_manager = GUIManager(self.config_manager)
             
             logging.info("Todos los componentes inicializados correctamente")
             
@@ -143,13 +143,19 @@ class Audio2TextProcessor:
             
             # Determinar idioma para transcripción
             transcription_language = forced_language or self.config_manager.get('IDIOMA_FORZADO', 'es')
-            
+
+            transcription_started_at = time.perf_counter()
             full_transcript = self.transcription_manager.get_full_transcript(
                 audio_segments, 
                 transcription_language
             )
             transcription_metadata = self.transcription_manager.get_last_run_metadata()
-            logging.info("Transcripción completada")
+            transcription_elapsed_seconds = time.perf_counter() - transcription_started_at
+            transcription_metadata["elapsed_seconds"] = transcription_elapsed_seconds
+            logging.info(
+                "Transcripción completada en %.2f segundos",
+                transcription_elapsed_seconds,
+            )
             
             # Paso 3: Analizar texto y generar resúmenes
             if progress_callback:
@@ -228,7 +234,10 @@ class Audio2TextProcessor:
                 forced_language = self.gui_manager.ask_force_language()
                 
                 # Crear diálogo de progreso
-                progress_dialog = ProgressDialog(None, "Procesando archivo de audio...")
+                progress_dialog = ProgressDialog(
+                    self.gui_manager.get_root(),
+                    "Procesando archivo de audio...",
+                )
                 
                 def update_progress(message: str):
                     try:
@@ -311,7 +320,7 @@ class Audio2TextProcessor:
                 
                 poll()
                 try:
-                    progress_dialog.root.mainloop()
+                    progress_dialog.root.wait_window()
                 except tk.TclError:
                     pass
                 

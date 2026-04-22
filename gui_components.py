@@ -4,6 +4,7 @@ import logging
 import os
 import tkinter as tk
 from pathlib import Path
+from queue import Empty, Queue
 from tkinter import filedialog, messagebox
 from typing import Optional
 
@@ -67,9 +68,25 @@ def _get_dialog_parent() -> Optional[tk.Misc]:
 
 def _create_hidden_root() -> tk.Tk:
     """Crea una raiz Tk oculta para dialogos del sistema."""
-    root = tk.Tk()
+    root = ctk.CTk()
     root.withdraw()
     return root
+
+
+def _destroy_window(window: Optional[tk.Misc]) -> None:
+    """Destruye una ventana de forma segura."""
+    if not window:
+        return
+
+    try:
+        if not window.winfo_exists():
+            return
+        _safe_release_grab(window)
+        window.withdraw()
+        window.update_idletasks()
+        window.destroy()
+    except tk.TclError:
+        pass
 
 
 class ProgressDialog:
@@ -79,8 +96,11 @@ class ProgressDialog:
         self.parent = parent
         self.owns_root = parent is None
         self.cancelled = False
+        self.closed = False
         self.progress_maximum = 1
         self.root = ctk.CTk() if self.owns_root else ctk.CTkToplevel(parent)
+        self._ui_queue: Queue[tuple[str, object]] = Queue()
+        self._ui_job = None
         self.root.title(title)
         self.root.resizable(False, False)
         _center_window(self.root, 420, 180)
@@ -92,6 +112,7 @@ class ProgressDialog:
             self.root.grab_set()
 
         _bring_to_front(self.root)
+        self._schedule_ui_processing()
 
     def setup_widgets(self):
         """Configura los widgets de la ventana de progreso."""
@@ -125,57 +146,59 @@ class ProgressDialog:
 
     def update_status(self, message: str):
         """Actualiza el mensaje de estado."""
-
-        def _update():
-            try:
-                if self.root and self.root.winfo_exists():
-                    self.status_label.configure(text=message)
-                    self.root.update_idletasks()
-            except tk.TclError:
-                pass
-
-        try:
-            if self.root and self.root.winfo_exists():
-                self.root.after(0, _update)
-        except tk.TclError:
-            pass
+        self._ui_queue.put(("status", message))
 
     def set_determinate_progress(self, maximum: int):
         """Cambia la barra a progreso determinado."""
-
-        def _set_det():
-            try:
-                if self.root and self.root.winfo_exists():
-                    self.progress_maximum = max(int(maximum), 1)
-                    self.progress_bar.stop()
-                    self.progress_bar.configure(mode="determinate")
-                    self.progress_bar.set(0)
-            except tk.TclError:
-                pass
-
-        try:
-            if self.root and self.root.winfo_exists():
-                self.root.after(0, _set_det)
-        except tk.TclError:
-            pass
+        self._ui_queue.put(("determinate", maximum))
 
     def update_progress(self, value: int):
         """Actualiza el valor del progreso."""
+        self._ui_queue.put(("progress", value))
 
-        def _update_prog():
+    def _schedule_ui_processing(self):
+        """Programa el procesamiento de la cola de UI."""
+        try:
+            if self.closed or not self.root or not self.root.winfo_exists():
+                return
+            self._ui_job = self.root.after(100, self._process_ui_queue)
+        except tk.TclError:
+            self._ui_job = None
+
+    def _process_ui_queue(self):
+        """Procesa en el hilo principal las actualizaciones pendientes."""
+        self._ui_job = None
+
+        try:
+            while True:
+                action, value = self._ui_queue.get_nowait()
+
+                if action == "status":
+                    self.status_label.configure(text=str(value))
+                elif action == "determinate":
+                    self.progress_maximum = max(int(value), 1)
+                    self.progress_bar.stop()
+                    self.progress_bar.configure(mode="determinate")
+                    self.progress_bar.set(0)
+                elif action == "progress":
+                    progress = max(
+                        0.0,
+                        min(float(value) / self.progress_maximum, 1.0),
+                    )
+                    self.progress_bar.set(progress)
+        except Empty:
+            pass
+        except tk.TclError:
+            pass
+        finally:
             try:
                 if self.root and self.root.winfo_exists():
-                    progress = max(0.0, min(float(value) / self.progress_maximum, 1.0))
-                    self.progress_bar.set(progress)
                     self.root.update_idletasks()
             except tk.TclError:
                 pass
 
-        try:
-            if self.root and self.root.winfo_exists():
-                self.root.after(0, _update_prog)
-        except tk.TclError:
-            pass
+            if not self.closed:
+                self._schedule_ui_processing()
 
     def cancel(self):
         """Marca el dialogo como cancelado."""
@@ -184,17 +207,18 @@ class ProgressDialog:
 
     def close(self):
         """Cierra la ventana de progreso."""
+        if self.closed:
+            return
+
+        self.closed = True
+
         try:
+            if self._ui_job and self.root and self.root.winfo_exists():
+                self.root.after_cancel(self._ui_job)
             if hasattr(self, "progress_bar"):
                 self.progress_bar.stop()
             if hasattr(self, "root") and self.root:
-                _safe_release_grab(self.root)
-                if self.owns_root:
-                    try:
-                        self.root.quit()
-                    except Exception:
-                        pass
-                self.root.destroy()
+                _destroy_window(self.root)
         except tk.TclError:
             pass
         except Exception:
@@ -251,8 +275,8 @@ class APIKeysDialog:
         input_frame.pack(fill="x", padx=20)
         input_frame.grid_columnconfigure(1, weight=1)
 
-        self.openai_var = tk.StringVar()
-        self.elevenlabs_var = tk.StringVar()
+        self.openai_var = tk.StringVar(master=self.root)
+        self.elevenlabs_var = tk.StringVar(master=self.root)
 
         ctk.CTkLabel(
             input_frame,
@@ -330,16 +354,7 @@ class APIKeysDialog:
 
     def _close(self):
         """Cierra el dialogo de forma segura."""
-        try:
-            _safe_release_grab(self.root)
-            if self.owns_root:
-                try:
-                    self.root.quit()
-                except Exception:
-                    pass
-            self.root.destroy()
-        except tk.TclError:
-            pass
+        _destroy_window(self.root)
 
     def show(self) -> Optional[dict]:
         """Muestra el dialogo y devuelve el resultado."""
@@ -418,7 +433,10 @@ class ServiceSelectionDialog:
         self.root.title("Seleccionar servicio de transcripcion")
         self.root.resizable(True, False)
         self.root.minsize(700, 620)
-        self.selected_service = tk.StringVar(value=current_service)
+        self.selected_service = tk.StringVar(
+            master=self.root,
+            value=current_service,
+        )
 
         self.center_window()
         self.setup_widgets(current_service)
@@ -596,13 +614,7 @@ class ServiceSelectionDialog:
     def close_dialog(self):
         """Cierra el dialogo de manera segura."""
         try:
-            _safe_release_grab(self.root)
-            if self.owns_root:
-                try:
-                    self.root.quit()
-                except Exception:
-                    pass
-            self.root.destroy()
+            _destroy_window(self.root)
         except Exception as exc:
             logging.error("Error cerrando dialogo: %s", exc)
 
@@ -656,15 +668,19 @@ class ConfigurationDialog:
         processing_frame = self.tabview.tab("Procesamiento")
 
         self.transcription_service = tk.StringVar(
+            master=self.root,
             value=config.get("TRANSCRIPTION_SERVICE", "local")
         )
         self.forced_language = tk.StringVar(
+            master=self.root,
             value=config.get("IDIOMA_FORZADO", "")
         )
         self.file_size_limit = tk.StringVar(
+            master=self.root,
             value=str(config.get("FILE_SIZE_LIMIT_MB", "24"))
         )
         self.chunk_duration = tk.StringVar(
+            master=self.root,
             value=str(config.get("CHUNK_DURATION_MIN", "10"))
         )
 
@@ -773,16 +789,7 @@ class ConfigurationDialog:
 
     def _close(self):
         """Cierra el dialogo."""
-        try:
-            _safe_release_grab(self.root)
-            if self.owns_root:
-                try:
-                    self.root.quit()
-                except Exception:
-                    pass
-            self.root.destroy()
-        except tk.TclError:
-            pass
+        _destroy_window(self.root)
 
     def show(self) -> Optional[dict]:
         """Muestra el dialogo y retorna el resultado."""
@@ -947,6 +954,15 @@ class GUIManager:
 
     def __init__(self, config_manager):
         self.config = config_manager
+        self._root: Optional[tk.Misc] = None
+
+    def get_root(self) -> tk.Misc:
+        """Devuelve una raiz CTk oculta y persistente."""
+        if self._root and self._root.winfo_exists():
+            return self._root
+
+        self._root = _create_hidden_root()
+        return self._root
 
     def ask_force_language(self) -> Optional[str]:
         """Ya no preguntamos al usuario si quiere forzar el idioma."""
@@ -954,44 +970,32 @@ class GUIManager:
 
     def get_user_files(self) -> tuple:
         """Obtiene los archivos de entrada y salida del usuario."""
-        root = _create_hidden_root()
-        try:
-            input_file = FileSelector.select_audio_file()
-            if not input_file:
-                return None, None
+        self.get_root()
 
-            base_name = os.path.splitext(os.path.basename(input_file))[0]
-            output_file = FileSelector.select_output_file(f"{base_name}_transcript")
-            if not output_file:
-                return None, None
+        input_file = FileSelector.select_audio_file()
+        if not input_file:
+            return None, None
 
-            return input_file, output_file
-        finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+        base_name = os.path.splitext(os.path.basename(input_file))[0]
+        output_file = FileSelector.select_output_file(f"{base_name}_transcript")
+        if not output_file:
+            return None, None
+
+        return input_file, output_file
 
     def ask_continue_processing(self) -> bool:
         """Pregunta si el usuario quiere procesar otro archivo."""
-        root = _create_hidden_root()
-        try:
-            return messagebox.askyesno(
-                "Procesar otro audio",
-                "Deseas procesar otro archivo de audio?",
-                parent=root,
-            )
-        finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+        return messagebox.askyesno(
+            "Procesar otro audio",
+            "Deseas procesar otro archivo de audio?",
+            parent=self.get_root(),
+        )
 
     def select_transcription_service(self) -> Optional[str]:
         """Permite al usuario seleccionar el servicio de transcripcion."""
         current_service = self.config.get("TRANSCRIPTION_SERVICE", "local")
         try:
-            dialog = ServiceSelectionDialog(None, current_service)
+            dialog = ServiceSelectionDialog(self.get_root(), current_service)
             return dialog.show()
         except Exception as exc:
             logging.error("Error en selector de servicio: %s", exc)
@@ -999,22 +1003,8 @@ class GUIManager:
 
     def show_error(self, title: str, message: str):
         """Muestra un mensaje de error."""
-        root = _create_hidden_root()
-        try:
-            messagebox.showerror(title, message, parent=root)
-        finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+        messagebox.showerror(title, message, parent=self.get_root())
 
     def show_info(self, title: str, message: str):
         """Muestra un mensaje de informacion."""
-        root = _create_hidden_root()
-        try:
-            messagebox.showinfo(title, message, parent=root)
-        finally:
-            try:
-                root.destroy()
-            except tk.TclError:
-                pass
+        messagebox.showinfo(title, message, parent=self.get_root())
